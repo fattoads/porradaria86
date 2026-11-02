@@ -5,6 +5,9 @@
 ; ALTERAÇÕES: Enrico Polez, Felipe Bruno, Vitor Tomé
 ;   Adaptação para uso como módulo no projeto (removendo código de teste e suas variáveis, exportando funções)
 
+; ver linec.inc para entender a necessidade dessa linha
+%define LINEC_ASM
+
 %include "linec.inc"
 
 ; ------------------------------------------------------------------------------

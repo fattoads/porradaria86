@@ -6,6 +6,11 @@
 %ifndef LINEC_INC
 %define LINEC_INC
 
+; linec.asm precisa incluir esse arquivo para inicializar a variável cor com uma cor padrão (branco),
+; mas incluir os símbolos extern causa conflito na compilação por causa de dupla definição. logo,
+; precisamos de uma diretiva condicional pra excluir esses símbolos quando o include for chamado por linec.asm.
+%ifndef LINEC_ASM
+
 ; Funções exportadas de linec.asm
 extern cursor     
 extern caracter   
@@ -16,6 +21,8 @@ extern line
 
 ; Variáveis exportadas de linec.asm
 extern cor
+
+%endif
 
 ; ------------------------------------------------------------------------------
 ; Definições de cores

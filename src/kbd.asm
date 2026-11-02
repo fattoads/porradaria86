@@ -48,7 +48,7 @@ kbd_init:
     mov     di, key_states
     mov     cx, 128
 .clear_loop:
-    mov     [di], 0
+    mov     byte [di], 0
     inc     di
     loop    .clear_loop
 

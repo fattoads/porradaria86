@@ -1,10 +1,10 @@
 # Ferramentas
 ASM      = nasm
 ASMFLAGS = -f obj -g -Iinclude/
-LD       = freelink
+LD       = ./alink.exe
 
 # Nome do Executável Final
-TARGET   = JOGO.EXE
+TARGET   = jogo.exe
 
 # Diretórios
 SRC_DIR  = src
@@ -27,7 +27,7 @@ all: setup $(TARGET)
 
 # Alvo de Criação do Executável Final
 $(TARGET): $(OBJS)
-	$(LD) $(OBJS) -o $(TARGET)
+	$(LD) -o $(TARGET) $(OBJS)
 	@echo "--------------------------------------------------------"
 	@echo " Compilacao concluida com sucesso: $(TARGET)"
 	@echo " Executar no DOSBox: $(TARGET)"
