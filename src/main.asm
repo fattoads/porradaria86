@@ -10,6 +10,7 @@
 ; ------------------------------------------------------------------------------
 %include "kbd.inc"
 %include "video.inc"
+%include "ui.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS / IMPORTADOS
@@ -19,10 +20,10 @@ global main
 ; ------------------------------------------------------------------------------
 ; ESTADO DO JOGO
 ; ------------------------------------------------------------------------------
-STATE_SELECT     equ 0  ; Seleção de personagem
-STATE_PLAYING    equ 1  ; Jogo em andamento
-STATE_PAUSED     equ 2  ; Jogo pausado
-STATE_GAMEOVER   equ 3  ; Tela de Game Over
+STATE_SELECT            equ 0  ; Seleção de personagem
+STATE_PLAYING           equ 1  ; Jogo em andamento
+STATE_PAUSED            equ 2  ; Jogo pausado
+STATE_GAMEOVER          equ 3  ; Tela de Game Over
 
 ; ------------------------------------------------------------------------------
 ; DS
@@ -30,16 +31,21 @@ STATE_GAMEOVER   equ 3  ; Tela de Game Over
 segment data
 
 ; Estado atual do jogo - iniciando direto no jogo pra testes iniciais
-game_state     db STATE_PLAYING
+game_state              db STATE_PLAYING
 
 ; Flag de execução do jogo
-game_running   db 1
+game_running            db 1
 
 ; "Debounce" de tecla para o toggle da Pausa (evita alternar várias vezes no mesmo clique)
-p_key_was_pressed db 0
+p_key_was_pressed       db 0
+
+; Pontos de Vida (HP) dos jogadores (0 a 10) 
+; TODO: mover para player.asm. tá aqui somente pra testes
+hp_p1                   db 10 
+hp_p2                   db 10
 
 ; Mensagem de encerramento
-msg_quit       db "Jogo encerrado com sucesso. Restaurando DOS...", 0Dh, 0Ah, "$"
+msg_quit                db "Jogo encerrado com sucesso. Restaurando DOS...", 0Dh, 0Ah, "$"
 
 ; ------------------------------------------------------------------------------
 ; CS
@@ -60,6 +66,9 @@ segment code
 
     ; Instala a ISR customizada do teclado
     call    kbd_init
+
+    ; Desenha a moldura da arena e títulos
+    call    ui_draw_arena
 
     ; TODO: Inicializar outros módulos e interrupts (timer...!)
 
@@ -103,10 +112,12 @@ segment code
 
 .set_paused:
     mov     byte [game_state], STATE_PAUSED
+    call    ui_draw_pause                  ; Tela de pausa só precisa ser desenhada 1 vez
     jmp     .update_state
 
 .set_playing:
     mov     byte [game_state], STATE_PLAYING
+    call    ui_draw_arena                   ; Arena só precisa ser desenhada 1 vez
     jmp     .update_state
 
 .trigger_quit:
@@ -143,8 +154,6 @@ segment code
     jmp     .render_frame
 
 .state_paused_logic:
-    ; TODO: Desenhar o overlay de "PAUSED" na tela (ui.asm)
-    ; Pensei em "escurecer" a tela e desenhar o texto em branco no centro, mas não sei quão simples isso seria de implementar.
     jmp     .render_frame
 
 .state_gameover_logic:
@@ -157,6 +166,11 @@ segment code
     call video_wait_vsync
 
     ; TODO: Chamadas de rotinas de renderização
+
+    ; Desenha a barra de HP dos dois jogadores
+    mov    al, [hp_p1] 
+    mov    ah, [hp_p2] 
+    call   ui_draw_hud                     ; hud precisa ser atualizada constantemente
 
     jmp     .game_loop
 
