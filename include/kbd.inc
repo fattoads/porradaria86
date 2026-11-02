@@ -6,14 +6,16 @@
 %ifndef KBD_INC
 %define KBD_INC
 
-; Símbolos externos implementados em kbd.asm
+; Funções exportadas de kbd.asm
 extern kbd_init
 extern kbd_restore
+
+; Variáveis exportadas de kbd.asm
 extern is_key_pressed
 extern key_states
 
 ; ------------------------------------------------------------------------------
-; Mapeamento dos Scan Codes (Make Codes) de Teclas Usadas no Jogo
+; Mapeamento dos Scan Codes (Make Codes) de teclas usadas no jogo
 ; ------------------------------------------------------------------------------
 SCANCODE_ESC       equ 0x01
 SCANCODE_ENTER     equ 0x1C

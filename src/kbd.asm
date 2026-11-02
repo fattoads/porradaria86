@@ -128,19 +128,20 @@ kbd_isr:
 
     ; Analisa se é Make Code (Pressionada) ou Break Code (Solta)
     ; Se o bit 7 (0x80) de AL estiver setado, é um break code, logo saltamos pra .key_released
-    mov     bl, al
-    test    al, 80h
+    ; Caso contrário, seguimos para .key_pressed
+    mov     bl, al              ; A tabela é indexada pelo código, então armazenamos ele em BL (somente BX pode indexar memória)
+    test    al, 80h             ; Testa o bit 7
     jnz     .key_released
 
 .key_pressed:
     ; Setamos o estado dessa tecla
-    and     bx, 007Fh           ; Mantém apenas os 7 bits inferiores
+    and     bx, 007Fh           ; O scan code só é representado pelos primeiros 7 bits
     mov     byte [key_states + bx], 1
     jmp     .eoi
 
 .key_released:
     ; Zeramos o estado dessa tecla
-    and     bx, 007Fh           ; Mantém apenas os 7 bits inferiores
+    and     bx, 007Fh           ; O scan code só é representado pelos primeiros 7 bits
     mov     byte [key_states + bx], 0
 
 .eoi:
@@ -161,8 +162,8 @@ kbd_isr:
 ; ------------------------------------------------------------------------------
 is_key_pressed:
     push    bx
-    mov     bl, al
-    and     bx, 007Fh
-    mov     al, [key_states + bx]
+    mov     bl, al                  ; Armazenando scan code em BL para indexação
+    and     bx, 007Fh               ; O scan code só é representado pelos primeiros 7 bits
+    mov     al, [key_states + bx]   ; AL armazena o estado da tecla
     pop     bx
     ret
