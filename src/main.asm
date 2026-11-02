@@ -1,0 +1,191 @@
+; ==============================================================================
+; MÓDULO: main.asm
+; DESCRIÇÃO: Ponto de entrada do jogo, controle da máquina de estados,
+;             loop de execução e encerramento seguro.
+; AUTORIA: Enrico Polez, Felipe Bruno, Vitor Tomé
+; ==============================================================================
+
+; ------------------------------------------------------------------------------
+; INCLUDES
+; ------------------------------------------------------------------------------
+%include "kbd.inc"
+
+; ------------------------------------------------------------------------------
+; SÍMBOLOS EXPORTADOS / IMPORTADOS
+; ------------------------------------------------------------------------------
+global main
+
+; ------------------------------------------------------------------------------
+; ESTADO DO JOGO
+; ------------------------------------------------------------------------------
+STATE_SELECT     equ 0  ; Seleção de personagem
+STATE_PLAYING    equ 1  ; Jogo em andamento
+STATE_PAUSED     equ 2  ; Jogo pausado
+STATE_GAMEOVER   equ 3  ; Tela de Game Over
+
+; ------------------------------------------------------------------------------
+; DS
+; ------------------------------------------------------------------------------
+segment data
+
+; Guarda o modo de vídeo original do sistema para restauração ao sair
+orig_video_mode db 0
+
+; Estado atual do jogo - iniciando direto no jogo pra testes iniciais
+game_state     db STATE_PLAYING
+
+; Flag de execução do jogo
+game_running   db 1
+
+; "Debounce" de tecla para o toggle da Pausa (evita alternar várias vezes no mesmo clique)
+p_key_was_pressed db 0
+
+; Mensagem de encerramento
+msg_quit       db "Jogo encerrado com sucesso. Restaurando DOS...", 0Dh, 0Ah, "$"
+
+; ------------------------------------------------------------------------------
+; CS
+; ------------------------------------------------------------------------------
+segment code
+
+main:
+    ; Inicialização de registradores
+    mov 	ax,data					        ; inicializa o registrador de Segmento de Dados DS e o extra ES
+    mov 	ds,ax   
+    mov 	es,ax
+    mov 	ax,stack				        ; inicializa o registrador de Segmento de Pilha SS
+    mov 	ss,ax   
+    mov 	sp,stacktop				        ; inicializa o apontador de Pilha SP
+
+    ; Salvando o modo de vídeo atual
+    mov     ah, 0Fh
+    int     10h
+    mov     [orig_video_mode], al
+
+    ; Configura o Modo Gráfico VGA 12h (640x480, 16 cores)
+    mov     ah, 00h
+    mov     al, 12h
+    int     10h
+
+    ; Instala a ISR customizada do teclado
+    call    kbd_init
+
+    ; TODO: Inicializar outros módulos e interrupts (timer...!)
+
+; ------------------------------------------------------------------------------
+; LOOP DE EXECUÇÃO
+; ------------------------------------------------------------------------------
+.game_loop:
+    ; Verifica se o flag de execução continua ativo
+    cmp     byte [game_running], 0
+    je      .exit_game
+
+    ; Primeiro, consideramos as teclas que afetam o estado global do jogo (pausa e encerramento).
+    ; Tecla Q: Encerra a aplicação
+    mov     al, SCANCODE_Q
+    call    is_key_pressed
+    cmp     al, 1
+    je      .trigger_quit
+
+    ; Tecla P: Alterna estado de pausa
+    mov     al, SCANCODE_P
+    call    is_key_pressed
+    cmp     al, 1
+    je      .handle_pause_key
+    
+    ; Se P não está apertada, reseta o flag de debounce
+    mov     byte [p_key_was_pressed], 0
+    jmp     .update_state
+
+.handle_pause_key:
+    ; Só alterna a pausa se a tecla P não estava pressionada no quadro anterior
+    cmp     byte [p_key_was_pressed], 0
+    jne     .update_state
+    mov     byte [p_key_was_pressed], 1     ; Marca que P está pressionada
+
+    ; Inverte o estado entre PLAYING e PAUSED
+    cmp     byte [game_state], STATE_PLAYING
+    je      .set_paused
+    cmp     byte [game_state], STATE_PAUSED
+    je      .set_playing
+    jmp     .update_state
+
+.set_paused:
+    mov     byte [game_state], STATE_PAUSED
+    jmp     .update_state
+
+.set_playing:
+    mov     byte [game_state], STATE_PLAYING
+    jmp     .update_state
+
+.trigger_quit:
+    mov     byte [game_running], 0
+    jmp     .game_loop  ; Próximo loop vai detectar a flag e encerrar imediatamente
+
+; Decidimos o curso a seguir com base no estado e encerramos cada lógica com a renderização do resultado na tela.
+.update_state:
+    mov     al, [game_state]
+
+    cmp     al, STATE_SELECT
+    je      .state_select_logic
+
+    cmp     al, STATE_PLAYING
+    je      .state_playing_logic
+
+    cmp     al, STATE_PAUSED
+    je      .state_paused_logic
+
+    cmp     al, STATE_GAMEOVER
+    je      .state_gameover_logic
+
+    ; unreachable, mas sempre terminamos com a renderização
+    jmp     .render_frame
+
+.state_select_logic:
+    ; TODO: Lógica e desenho da tela de seleção de personagens
+    jmp     .render_frame
+
+.state_playing_logic:
+    ; TODO: Leitura de inputs dos lutadores (A/D/W/S e Setas)
+    ; TODO: Atualizar física, gravidade e colisões (physics.asm)
+    ; TODO: Processar dano e regras (game.asm)
+    jmp     .render_frame
+
+.state_paused_logic:
+    ; TODO: Desenhar o overlay de "PAUSED" na tela (ui.asm)
+    ; Pensei em "escurecer" a tela e desenhar o texto em branco no centro, mas não sei quão simples isso seria de implementar.
+    jmp     .render_frame
+
+.state_gameover_logic:
+    ; TODO: Desenhar a tela de Game Over e placar final (ui.asm)
+    jmp     .render_frame
+
+.render_frame:
+    ; TODO: Atualizações de tela / buffer de vídeo
+    jmp     .game_loop
+
+; Restauração do estado pré-execução e retorno ao DOS
+.exit_game:
+    ; Restaura a ISR original da INT 9h
+    call    kbd_restore
+
+    ; Restaura o modo de vídeo original do sistema
+    mov     ah, 00h
+    mov     al, [orig_video_mode]
+    int     10h
+
+    ; Exibe mensagem de finalização no DOS no modo texto
+    mov     dx, msg_quit
+    mov     ah, 09h
+    int     21h
+
+    ; Retorna o controle ao DOS com código de saída 0
+    mov     ax, 4C00h
+    int     21h
+
+; ------------------------------------------------------------------------------
+; SS
+; ------------------------------------------------------------------------------
+segment stack stack
+    resb 1024                ; Reserva 1024 bytes de pilha para o programa
+stacktop:
