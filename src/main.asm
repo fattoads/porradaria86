@@ -9,6 +9,7 @@
 ; INCLUDES
 ; ------------------------------------------------------------------------------
 %include "kbd.inc"
+%include "video.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS / IMPORTADOS
@@ -27,9 +28,6 @@ STATE_GAMEOVER   equ 3  ; Tela de Game Over
 ; DS
 ; ------------------------------------------------------------------------------
 segment data
-
-; Guarda o modo de vídeo original do sistema para restauração ao sair
-orig_video_mode db 0
 
 ; Estado atual do jogo - iniciando direto no jogo pra testes iniciais
 game_state     db STATE_PLAYING
@@ -57,15 +55,8 @@ main:
     mov 	ss,ax   
     mov 	sp,stacktop				        ; inicializa o apontador de Pilha SP
 
-    ; Salvando o modo de vídeo atual
-    mov     ah, 0Fh
-    int     10h
-    mov     [orig_video_mode], al
-
     ; Configura o Modo Gráfico VGA 12h (640x480, 16 cores)
-    mov     ah, 00h
-    mov     al, 12h
-    int     10h
+    call    video_init
 
     ; Instala a ISR customizada do teclado
     call    kbd_init
@@ -161,7 +152,12 @@ main:
     jmp     .render_frame
 
 .render_frame:
-    ; TODO: Atualizações de tela / buffer de vídeo
+    ; VSYNC!!! Aguarda a placa de vídeo entrar em Retrace Vertical 
+    ; para desenhar/atualizar os elementos, evitando screen-tearing e reduzindo flickering
+    call video_wait_vsync
+
+    ; TODO: Chamadas de rotinas de renderização
+
     jmp     .game_loop
 
 ; Restauração do estado pré-execução e retorno ao DOS
@@ -170,9 +166,7 @@ main:
     call    kbd_restore
 
     ; Restaura o modo de vídeo original do sistema
-    mov     ah, 00h
-    mov     al, [orig_video_mode]
-    int     10h
+    call    video_restore
 
     ; Exibe mensagem de finalização no DOS no modo texto
     mov     dx, msg_quit

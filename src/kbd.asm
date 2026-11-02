@@ -1,3 +1,4 @@
+; ==============================================================================
 ; MÓDULO: kbd.asm
 ; DESCRIÇÃO: Trata a interrupção de hardware do teclado (INT 9h) e
 ;            mantém um buffer assíncrono de teclas pressionadas (key_states).
