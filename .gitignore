@@ -1,2 +1,5 @@
 # artefatos de compilação
 build/
+
+#executável do jogo
+jogo.exe
