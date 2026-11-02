@@ -46,7 +46,7 @@ msg_quit       db "Jogo encerrado com sucesso. Restaurando DOS...", 0Dh, 0Ah, "$
 ; ------------------------------------------------------------------------------
 segment code
 
-main:
+..start:
     ; Inicialização de registradores
     mov 	ax,data					        ; inicializa o registrador de Segmento de Dados DS e o extra ES
     mov 	ds,ax   
