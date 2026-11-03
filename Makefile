@@ -1,7 +1,7 @@
 # Ferramentas
 ASM      = nasm
 ASMFLAGS = -f obj -g -Iinclude/
-LD       = ./ALINK.EXE	#Para linux descomentar a parte wine
+LD       = make ./ALINK.EXE	#Para linux descomentar a parte wine
 
 # Nome do Executável Final
 TARGET   = jogo.exe
