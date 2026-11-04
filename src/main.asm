@@ -11,6 +11,8 @@
 %include "kbd.inc"
 %include "video.inc"
 %include "ui.inc"
+%include "player.inc" 
+%include "action.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS / IMPORTADOS
@@ -70,6 +72,8 @@ segment code
     ; Desenha a moldura da arena e títulos
     call    ui_draw_arena
 
+    ; Inicializa as estruturas dos lutadores p1 e p2
+    call    player_init
     ; TODO: Inicializar outros módulos e interrupts (timer...!)
 
 ; ------------------------------------------------------------------------------
@@ -148,8 +152,12 @@ segment code
     jmp     .render_frame
 
 .state_playing_logic:
-    ; TODO: Leitura de inputs dos lutadores (A/D/W/S e Setas)
-    ; TODO: Atualizar física, gravidade e colisões (physics.asm)
+    ; Leitura de inputs de movimento dos lutadores
+    call    player_update_input
+
+    ; Atualização da física e interações
+    call    action_update
+
     ; TODO: Processar dano e regras (game.asm)
     jmp     .render_frame
 
@@ -165,11 +173,13 @@ segment code
     ; para desenhar/atualizar os elementos, evitando screen-tearing e reduzindo flickering
     call video_wait_vsync
 
-    ; TODO: Chamadas de rotinas de renderização
+    ; Limpa sprites do frame anterior e renderiza os novos
+    call    player_erase_all
+    call    player_draw_all
 
     ; Desenha a barra de HP dos dois jogadores
-    mov    al, [hp_p1] 
-    mov    ah, [hp_p2] 
+    mov    al, [p1 + Player.hp] 
+    mov    ah, [p2 + Player.hp] 
     call   ui_draw_hud                     ; hud precisa ser atualizada constantemente
 
     jmp     .game_loop

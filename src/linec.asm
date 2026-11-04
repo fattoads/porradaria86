@@ -94,8 +94,7 @@ plot_xy:
 	    MOV     AH,0Ch
 	    MOV     AL,[cor]
 	    MOV     BH,0
-	    MOV     DX,479
-		SUB		DX,[BP+4]
+	    MOV		DX,[BP+4]	; Retirada a inversão do eixo Y
 	    MOV     CX,[BP+6]
 	    INT     10h
 		POP		DI
