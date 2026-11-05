@@ -2,7 +2,7 @@
 ; MÓDULO: player.asm
 ; DESCRIÇÃO: Armazena o estado dos lutadores (p1 e p2), gerencia a entrada de
 ;             teclado dos jogadores e renderiza os personagens na tela.
-; AUTORIA: Enrico Polez Ferreira Pinto
+; AUTORIA: Enrico Polez, Felipe Bruno, Vitor Tomé
 ; ==============================================================================
 
 %define PLAYER_ASM

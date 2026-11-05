@@ -14,6 +14,7 @@
 %include "player.inc" 
 %include "action.inc"
 %include "timer.inc"
+%include "game.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS / IMPORTADOS
@@ -21,20 +22,9 @@
 global main
 
 ; ------------------------------------------------------------------------------
-; ESTADO DO JOGO
-; ------------------------------------------------------------------------------
-STATE_SELECT            equ 0  ; Seleção de personagem
-STATE_PLAYING           equ 1  ; Jogo em andamento
-STATE_PAUSED            equ 2  ; Jogo pausado
-STATE_GAMEOVER          equ 3  ; Tela de Game Over
-
-; ------------------------------------------------------------------------------
 ; DS
 ; ------------------------------------------------------------------------------
 segment data
-
-; Estado atual do jogo - iniciando direto no jogo pra testes iniciais
-game_state              db STATE_PLAYING
 
 ; Flag de execução do jogo
 game_running            db 1
