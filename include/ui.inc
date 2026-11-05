@@ -20,6 +20,7 @@ extern ui_draw_pause
 extern draw_rect_filled
 extern ui_draw_gameover
 extern ui_draw_confirm_quit
+extern ui_draw_select
 
 %endif
 

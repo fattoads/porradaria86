@@ -15,6 +15,7 @@
 %include "action.inc"
 %include "game.inc"
 %include "timer.inc"
+%include "linec.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS / IMPORTADOS
@@ -57,6 +58,14 @@ gameover_drawn          db 0
 ; Guarda o estado anterior ao pedido de confirmacao de saida do jogo
 prev_game_state         db STATE_PLAYING
 
+; Paleta de 4 cores disponíveis na seleção
+color_palette           db cyan_claro, rosa, verde, vermelho
+p1_color_idx            db 0            ; Índice inicial P1 (0 = cyan_claro)
+p2_color_idx            db 1            ; Índice inicial P2 (1 = rosa)
+select_step             db 0            ; 0 = P1 escolhendo, 1 = P2 escolhendo
+select_needs_redraw     db 1            ; 1 = Precisa redesenhar a caixa de seleção
+select_key_lock         db 0            ; Debounce para teclas do menu (W/S/Setas/Enter)
+
 ; ------------------------------------------------------------------------------
 ; CS
 ; ------------------------------------------------------------------------------
@@ -81,8 +90,13 @@ segment code
     ; Desenha a moldura da arena e títulos
     call    ui_draw_arena
 
+    ; Inicializa posições dos lutadores e configura estado inicial para seleção
+    call    player_init
+    mov     byte [p1 + Player.color], cyan_claro
+    mov     byte [p2 + Player.color], rosa
+    mov     byte [game_state], STATE_SELECT
     ; Inicializa a partida (zera rounds, seta round_timer = 180, chama player_init e ativa STATE_PLAYING)
-    call    start_game
+    ; call    start_game
     ; TODO: Inicializar outros módulos e interrupts (timer...!)
 
 ; ------------------------------------------------------------------------------
@@ -172,7 +186,141 @@ segment code
     jmp     .render_frame
 
 .state_select_logic:
-    ; TODO: Lógica e desenho da tela de seleção de personagens
+    ; Atualiza as cores nas structs para visualização em tempo real dos bonecos
+    xor     bx, bx
+    mov     bl, [p1_color_idx]
+    mov     al, [color_palette + bx]
+    mov     [p1 + Player.color], al
+
+    mov     bl, [p2_color_idx]
+    mov     al, [color_palette + bx]
+    mov     [p2 + Player.color], al
+
+    ; Redesenha o menu apenas quando houver mudança
+    cmp     byte [select_needs_redraw], 0
+    je      .check_select_input
+
+    mov     al, [p1_color_idx]
+    mov     ah, [p2_color_idx]
+    mov     bl, [select_step]
+    call    ui_draw_select
+    mov     byte [select_needs_redraw], 0
+
+.check_select_input:
+    ; Se uma tecla do menu ainda está segurada, aguarda soltar todas (debounce)
+    cmp     byte [select_key_lock], 0
+    je      .read_select_keys
+
+    mov     al, SCANCODE_W
+    call    is_key_pressed
+    mov     bl, al
+    mov     al, SCANCODE_S
+    call    is_key_pressed
+    or      bl, al
+    mov     al, SCANCODE_UP
+    call    is_key_pressed
+    or      bl, al
+    mov     al, SCANCODE_DOWN
+    call    is_key_pressed
+    or      bl, al
+    mov     al, SCANCODE_ENTER
+    call    is_key_pressed
+    or      bl, al
+    cmp     bl, 0
+    jne     .render_frame
+    mov     byte [select_key_lock], 0
+
+.read_select_keys:
+    cmp     byte [select_step], 0
+    je      .p1_select_turn
+
+    ; --- VEZ DO JOGADOR 2 (Setas Cima/Baixo e Enter) ---
+    mov     al, SCANCODE_UP
+    call    is_key_pressed
+    cmp     al, 1
+    je      .p2_prev_color
+
+    mov     al, SCANCODE_DOWN
+    call    is_key_pressed
+    cmp     al, 1
+    je      .p2_next_color
+
+    mov     al, SCANCODE_ENTER
+    call    is_key_pressed
+    cmp     al, 1
+    je      .confirm_p2_and_start
+    jmp     .render_frame
+
+.p2_prev_color:
+    dec     byte [p2_color_idx]
+    and     byte [p2_color_idx], 03h    ; Wrap-around entre 0 e 3
+    mov     al, [p2_color_idx]
+    cmp     al, [p1_color_idx]
+    je      .p2_prev_color              ; Pula a cor já escolhida pelo P1
+    mov     byte [select_key_lock], 1
+    mov     byte [select_needs_redraw], 1
+    jmp     .render_frame
+
+.p2_next_color:
+    inc     byte [p2_color_idx]
+    and     byte [p2_color_idx], 03h    ; Wrap-around entre 0 e 3
+    mov     al, [p2_color_idx]
+    cmp     al, [p1_color_idx]
+    je      .p2_next_color              ; Pula a cor já escolhida pelo P1
+    mov     byte [select_key_lock], 1
+    mov     byte [select_needs_redraw], 1
+    jmp     .render_frame
+
+.confirm_p2_and_start:
+    mov     byte [select_key_lock], 1
+    ; Limpa a caixa de seleção redesenhando a tela e inicia a partida
+    call    video_init
+    call    ui_draw_arena
+    call    start_game
+    jmp     .render_frame
+
+    ; --- VEZ DO JOGADOR 1 (W/S e Enter) ---
+.p1_select_turn:
+    mov     al, SCANCODE_W
+    call    is_key_pressed
+    cmp     al, 1
+    je      .p1_prev_color
+
+    mov     al, SCANCODE_S
+    call    is_key_pressed
+    cmp     al, 1
+    je      .p1_next_color
+
+    mov     al, SCANCODE_ENTER
+    call    is_key_pressed
+    cmp     al, 1
+    je      .confirm_p1_choice
+    jmp     .render_frame
+
+.p1_prev_color:
+    dec     byte [p1_color_idx]
+    and     byte [p1_color_idx], 03h    ; Wrap-around entre 0 e 3
+    mov     byte [select_key_lock], 1
+    mov     byte [select_needs_redraw], 1
+    jmp     .render_frame
+
+.p1_next_color:
+    inc     byte [p1_color_idx]
+    and     byte [p1_color_idx], 03h    ; Wrap-around entre 0 e 3
+    mov     byte [select_key_lock], 1
+    mov     byte [select_needs_redraw], 1
+    jmp     .render_frame
+
+.confirm_p1_choice:
+    mov     byte [select_step], 1       ; Passa a vez para o P2
+    mov     byte [select_key_lock], 1
+    mov     byte [select_needs_redraw], 1
+    ; Se o cursor inicial do P2 coincidir com a cor que P1 escolheu, avança 1 posição
+    mov     al, [p2_color_idx]
+    cmp     al, [p1_color_idx]
+    jne     .render_frame
+    inc     byte [p2_color_idx]
+    and     byte [p2_color_idx], 03h
     jmp     .render_frame
 
 .state_playing_logic:
@@ -225,10 +373,10 @@ segment code
     call video_wait_vsync
 
     cmp     byte [game_state], STATE_PLAYING
-
-    ; Limpa sprites do frame anterior e renderiza os novos
-    call    player_erase_all
-    call    player_draw_all
+    je      .draw_fighters
+    cmp     byte [game_state], STATE_SELECT
+    je      .draw_fighters
+    jmp     .draw_hud_only
 
     ; Desenha a barra de HP dos dois jogadores
     mov    al, [p1 + Player.hp] 
@@ -236,6 +384,11 @@ segment code
     call   ui_draw_hud                     ; hud precisa ser atualizada constantemente
 
     jmp     .game_loop
+
+; Limpa sprites do frame anterior e renderiza os novos
+.draw_fighters:
+    call    player_erase_all
+    call    player_draw_all
 
 .draw_hud_only:
     mov     al, [p1 + Player.hp]

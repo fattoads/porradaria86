@@ -16,6 +16,7 @@ global ui_draw_pause
 global draw_rect_filled
 global ui_draw_gameover
 global ui_draw_confirm_quit
+global ui_draw_select
 
 global WALL_LEFT
 global WALL_RIGHT
@@ -85,6 +86,12 @@ str_timer       db "180", 0
 last_timer      dw 0FFFFh       ; Guarda o último segundo renderizado na tela
 
 msg_confirm_quit db "SAIR DO JOGO? (Y/N)", 0
+
+msg_sel_title   db "SELECAO DE LUTADORES", 0
+msg_sel_p1      db "VEZ DO P1 (W/S + ENTER)", 0
+msg_sel_p2      db "VEZ DO P2 (SETAS + ENTER)", 0
+msg_mark_p1     db "P1 >", 0
+msg_mark_p2     db "< P2", 0
 
 ; ------------------------------------------------------------------------------
 ; CS
@@ -266,14 +273,16 @@ ui_draw_arena:
     call    ui_print_string
 
     ; Jogador 1
-    mov     byte [cor], cyan_claro   ; Cor
+    mov     al, [p1 + Player.color]
+    mov     [cor], al
     mov     si, msg_p1          ; String
     mov     dh, 1               ; Linha
     mov     dl, 4               ; Coluna
     call    ui_print_string
 
     ; Jogador 2
-    mov     byte [cor], rosa         ; Cor
+    mov     al, [p2 + Player.color]
+    mov     [cor], al
     mov     si, msg_p2          ; String
     mov     dh, 1               ; Linha
     mov     dl, 65              ; Coluna
@@ -718,6 +727,146 @@ ui_draw_confirm_quit:
 
     pop     si
     pop     dx
+    pop     bx
+    pop     ax
+    ret
+
+; ------------------------------------------------------------------------------
+; ui_draw_select: Desenha o menu de seleção de cores no centro da arena.
+; Entrada:
+;   AL = Índice da cor atual do P1 (0 a 3)
+;   AH = Índice da cor atual do P2 (0 a 3)
+;   BL = Etapa da seleção (0 = Vez do P1, 1 = Vez do P2)
+; ------------------------------------------------------------------------------
+ui_draw_select:
+    push    ax
+    push    bx
+    push    cx
+    push    dx
+    push    si
+
+    mov     cl, al              ; CL = índice de cor do P1 (0..3)
+    mov     ch, ah              ; CH = índice de cor do P2 (0..3)
+    mov     bh, bl              ; BH = etapa (0 = P1, 1 = P2)
+
+    ; Fundo preto da caixa central (X=190, Y=140, W=260, H=200)
+    mov     byte [cor], preto
+    push    word 190
+    push    word 140
+    push    word 260
+    push    word 200
+    call    draw_rect_filled
+
+    ; Moldura branca da caixa
+    mov     byte [cor], branco_intenso
+    push    word 190
+    push    word 140
+    push    word 450
+    push    word 140
+    call    line
+
+    push    word 190
+    push    word 340
+    push    word 450
+    push    word 340
+    call    line
+
+    push    word 190
+    push    word 140
+    push    word 190
+    push    word 340
+    call    line
+
+    push    word 450
+    push    word 140
+    push    word 450
+    push    word 340
+    call    line
+
+    ; Título: "SELECAO DE LUTADORES" (Linha 10, Coluna 30)
+    mov     byte [cor], amarelo
+    mov     si, msg_sel_title
+    mov     dh, 10
+    mov     dl, 30
+    call    ui_print_string
+
+    ; Subtítulo indicando de quem é a vez (Linha 12)
+    cmp     bh, 0
+    jne     .turn_p2_msg
+    mov     byte [cor], cyan_claro
+    mov     si, msg_sel_p1
+    mov     dh, 12
+    mov     dl, 28
+    call    ui_print_string
+    jmp     .draw_swatches
+
+.turn_p2_msg:
+    mov     byte [cor], rosa
+    mov     si, msg_sel_p2
+    mov     dh, 12
+    mov     dl, 27
+    call    ui_print_string
+
+.draw_swatches:
+    ; Opção 0: cyan_claro (Y=224 / Linha de texto 14)
+    mov     byte [cor], cyan_claro
+    push    word 280
+    push    word 224
+    push    word 80
+    push    word 16
+    call    draw_rect_filled
+
+    ; Opção 1: rosa (Y=256 / Linha de texto 16)
+    mov     byte [cor], rosa
+    push    word 280
+    push    word 256
+    push    word 80
+    push    word 16
+    call    draw_rect_filled
+
+    ; Opção 2: verde (Y=288 / Linha de texto 18)
+    mov     byte [cor], verde
+    push    word 280
+    push    word 288
+    push    word 80
+    push    word 16
+    call    draw_rect_filled
+
+    ; Opção 3: vermelho (Y=320 / Linha de texto 20)
+    mov     byte [cor], vermelho
+    push    word 280
+    push    word 320
+    push    word 80
+    push    word 16
+    call    draw_rect_filled
+
+    ; Desenha o marcador "P1 >" na linha correspondente (Linha = 14 + CL * 2)
+    mov     byte [cor], branco_intenso
+    mov     al, cl
+    shl     al, 1               ; AL = CL * 2
+    add     al, 14              ; Linha 14, 16, 18 ou 20
+    mov     dh, al
+    mov     dl, 29              ; Coluna à esquerda da barra de cor
+    mov     si, msg_mark_p1
+    call    ui_print_string
+
+    ; Se estiver na vez do P2 (BH == 1), desenha o marcador "< P2"
+    cmp     bh, 1
+    jne     .done_select_ui
+
+    mov     byte [cor], branco_intenso
+    mov     al, ch
+    shl     al, 1               ; AL = CH * 2
+    add     al, 14              ; Linha 14, 16, 18 ou 20
+    mov     dh, al
+    mov     dl, 46              ; Coluna à direita da barra de cor
+    mov     si, msg_mark_p2
+    call    ui_print_string
+
+.done_select_ui:
+    pop     si
+    pop     dx
+    pop     cx
     pop     bx
     pop     ax
     ret
