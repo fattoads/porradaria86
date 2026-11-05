@@ -57,7 +57,7 @@ player_init:
     mov     byte [p1 + Player.state], STATE_IDLE
     mov     byte [p1 + Player.dir], DIR_RIGHT
     mov     byte [p1 + Player.color], cyan_claro
-    mov     byte [p1 + Player.rounds], 0
+    ; mov     byte [p1 + Player.rounds], 0
     mov     byte [p1 + Player.is_grounded], 1
     mov     byte [p1 + Player.attack_active], 0
     mov     byte [p1 + Player.stun_timer], 0
@@ -73,7 +73,7 @@ player_init:
     mov     byte [p2 + Player.state], STATE_IDLE
     mov     byte [p2 + Player.dir], DIR_LEFT
     mov     byte [p2 + Player.color], rosa
-    mov     byte [p2 + Player.rounds], 0
+    ; mov     byte [p2 + Player.rounds], 0
     mov     byte [p2 + Player.is_grounded], 1
     mov     byte [p2 + Player.attack_active], 0
     mov     byte [p2 + Player.stun_timer], 0

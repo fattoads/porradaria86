@@ -7,11 +7,15 @@
 
 %include "linec.inc"
 %include "ui.inc"
+%include "game.inc"
+%include "player.inc"
 
 global ui_draw_arena
 global ui_draw_hud
 global ui_draw_pause
 global draw_rect_filled
+global ui_draw_gameover
+global ui_draw_confirm_quit
 
 global WALL_LEFT
 global WALL_RIGHT
@@ -72,6 +76,15 @@ msg_title       db "PORRADARIA86", 0
 msg_p1          db "JOGADOR 1", 0
 msg_p2          db "JOGADOR 2", 0
 msg_paused      db "--- PAUSADO ---", 0
+msg_gameover    db "GAME OVER", 0
+msg_p1_wins     db "PLAYER 1 WINS", 0
+msg_p2_wins     db "PLAYER 2 WINS", 0
+msg_play_again  db "JOGAR NOVAMENTE? (Y/N)", 0
+
+str_timer       db "180", 0
+last_timer      dw 0FFFFh       ; Guarda o último segundo renderizado na tela
+
+msg_confirm_quit db "SAIR DO JOGO? (Y/N)", 0
 
 ; ------------------------------------------------------------------------------
 ; CS
@@ -266,6 +279,8 @@ ui_draw_arena:
     mov     dl, 65              ; Coluna
     call    ui_print_string
 
+    mov     word [last_timer], 0FFFFh
+
     ; Restaura estado
     pop     ax
     ret
@@ -349,7 +364,7 @@ ui_draw_hud:
 
 .loop_p2:
     cmp     si, 10
-    jge     .done_hud
+    jge     .draw_rounds
 
     ; Calcula X do bloco = 463 + SI * 15
     mov     ax, si
@@ -394,6 +409,108 @@ ui_draw_hud:
 
     inc     si
     jmp     .loop_p2
+
+; ==========================================================================
+; MARCADORES DE ROUNDS VENCIDOS (2 quadrados de 10x10px para cada jogador)
+; ==========================================================================
+.draw_rounds:
+    ; --- JOGADOR 1 (1º Round: X=190 | 2º Round: X=205) ---
+    mov     byte [cor], cinza
+    cmp     byte [p1 + Player.rounds], 1
+    jl      .draw_p1_r1
+    mov     byte [cor], amarelo
+.draw_p1_r1:
+    push    word 190            ; X
+    push    word 38             ; Y
+    push    word 10             ; Largura
+    push    word 10             ; Altura
+    call    draw_rect_filled
+
+    mov     byte [cor], cinza
+    cmp     byte [p1 + Player.rounds], 2
+    jl      .draw_p1_r2
+    mov     byte [cor], amarelo
+.draw_p1_r2:
+    push    word 205            ; X
+    push    word 38             ; Y
+    push    word 10             ; Largura
+    push    word 10             ; Altura
+    call    draw_rect_filled
+
+    ; --- JOGADOR 2 (1º Round: X=440 | 2º Round: X=425) ---
+    mov     byte [cor], cinza
+    cmp     byte [p2 + Player.rounds], 1
+    jl      .draw_p2_r1
+    mov     byte [cor], amarelo
+.draw_p2_r1:
+    push    word 440            ; X
+    push    word 38             ; Y
+    push    word 10             ; Largura
+    push    word 10             ; Altura
+    call    draw_rect_filled
+
+    mov     byte [cor], cinza
+    cmp     byte [p2 + Player.rounds], 2
+    jl      .draw_p2_r2
+    mov     byte [cor], amarelo
+.draw_p2_r2:
+    push    word 425            ; X
+    push    word 38             ; Y
+    push    word 10             ; Largura
+    push    word 10             ; Altura
+    call    draw_rect_filled
+
+; ==========================================================================
+; CRONÔMETRO DO ROUND (Centralizado entre as barras: Linha 2, Coluna 38)
+; ==========================================================================
+.draw_timer:
+    mov     ax, [round_timer]
+    cmp     ax, [last_timer]
+    je      .done_hud           ; Só redesenha se o segundo mudou
+
+    mov     [last_timer], ax
+
+    ; Garante que o valor não seja negativo antes da divisão
+    cmp     ax, 0
+    jge     .convert_digits
+    mov     ax, 0
+
+.convert_digits:
+    ; Centenas: AX / 100 -> AL = Quociente (centena), AH = Resto (0..99)
+    mov     bl, 100
+    div     bl
+    add     al, '0'
+    mov     [str_timer], al
+
+    ; Dezenas e Unidades: AH / 10 -> AL = Dezena, AH = Unidade
+    mov     al, ah
+    xor     ah, ah
+    mov     bl, 10
+    div     bl
+    add     al, '0'
+    mov     [str_timer + 1], al
+    add     ah, '0'
+    mov     [str_timer + 2], ah
+
+    ; Apaga os 3 caracteres anteriores (X = 38*8 = 304, Y = 2*16 = 32, W = 24, H = 16)
+    mov     byte [cor], preto
+    push    word 304
+    push    word 32
+    push    word 24
+    push    word 16
+    call    draw_rect_filled
+
+    ; Imprime o tempo (fica vermelho nos últimos 10 segundos)
+    mov     byte [cor], branco_intenso
+    cmp     word [round_timer], 10
+    jg      .print_time_str
+    mov     byte [cor], vermelho
+
+.print_time_str:
+    mov     si, str_timer
+    mov     dh, 2               ; Linha 2 (Y = 32)
+    mov     dl, 38              ; Coluna 38 (X = 304)
+    call    ui_print_string
 
 .done_hud:
     ; Restaura estado
@@ -460,5 +577,147 @@ ui_draw_pause:
     pop     bx
     pop     dx
     pop     si
+    pop     ax
+    ret
+
+; ------------------------------------------------------------------------------
+; ui_draw_gameover: Desenha o quadro de fim de jogo e anuncia o vencedor.
+; Entrada:
+;   AL = Vencedor da partida (1 = Jogador 1, 2 = Jogador 2)
+; ------------------------------------------------------------------------------
+ui_draw_gameover:
+    push    ax
+    push    bx
+    push    dx
+    push    si
+
+    mov     bl, al              ; Salva o vencedor (1 ou 2) em BL
+
+    ; Fundo preto da caixa central (X=200, Y=190, W=240, H=110)
+    mov     byte [cor], preto
+    push    word 200
+    push    word 190
+    push    word 240
+    push    word 110
+    call    draw_rect_filled
+
+    ; Moldura branca da caixa
+    mov     byte [cor], branco_intenso
+    push    word 200
+    push    word 190
+    push    word 440
+    push    word 190
+    call    line
+
+    push    word 200
+    push    word 300
+    push    word 440
+    push    word 300
+    call    line
+
+    push    word 200
+    push    word 190
+    push    word 200
+    push    word 300
+    call    line
+
+    push    word 440
+    push    word 190
+    push    word 440
+    push    word 300
+    call    line
+
+    ; Imprime "GAME OVER" (Linha 13, Coluna 35)
+    mov     byte [cor], amarelo
+    mov     si, msg_gameover
+    mov     dh, 13
+    mov     dl, 35
+    call    ui_print_string
+
+    ; Seleciona a mensagem e a cor do vencedor com base em BL
+    cmp     bl, 1
+    je      .p1_winner
+
+    mov     byte [cor], rosa
+    mov     si, msg_p2_wins
+    jmp     .print_winner
+
+.p1_winner:
+    mov     byte [cor], cyan_claro
+    mov     si, msg_p1_wins
+
+.print_winner:
+    ; Imprime "PLAYER X WINS" (Linha 15, Coluna 33)
+    mov     dh, 15
+    mov     dl, 33
+    call    ui_print_string
+
+    ; Imprime "JOGAR NOVAMENTE? (Y/N)" (Linha 17, Coluna 29)
+    mov     byte [cor], branco_intenso
+    mov     si, msg_play_again
+    mov     dh, 17
+    mov     dl, 29
+    call    ui_print_string
+
+    pop     si
+    pop     dx
+    pop     bx
+    pop     ax
+    ret
+
+; ------------------------------------------------------------------------------
+; ui_draw_confirm_quit: Desenha a caixa central perguntando se deseja sair (Y/N).
+; ------------------------------------------------------------------------------
+ui_draw_confirm_quit:
+    push    ax
+    push    bx
+    push    dx
+    push    si
+
+    ; Cria retângulo preto para o fundo da caixa (mesma área da caixa de pausa)
+    mov     byte [cor], preto
+    push    word 230            ; X
+    push    word 220            ; Y
+    push    word 180            ; W
+    push    word 40             ; H
+    call    draw_rect_filled
+
+    ; Desenha moldura vermelha de alerta
+    mov     byte [cor], vermelho
+    ; Topo
+    push    word 230
+    push    word 220
+    push    word 410
+    push    word 220
+    call    line
+    ; Base
+    push    word 230
+    push    word 260
+    push    word 410
+    push    word 260
+    call    line
+    ; Esquerda
+    push    word 230
+    push    word 220
+    push    word 230
+    push    word 260
+    call    line
+    ; Direita
+    push    word 410
+    push    word 220
+    push    word 410
+    push    word 260
+    call    line
+
+    ; Imprime "SAIR DO JOGO? (Y/N)" centralizado na caixa (Linha 15, Coluna 30)
+    mov     byte [cor], branco_intenso
+    mov     si, msg_confirm_quit
+    mov     dh, 15
+    mov     dl, 30
+    call    ui_print_string
+
+    pop     si
+    pop     dx
+    pop     bx
     pop     ax
     ret

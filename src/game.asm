@@ -11,7 +11,8 @@
 
 segment data
 
-global game_state, round_timer, match_winner
+global game_state, round_timer, match_winner, game_winner, current_round
+global start_game, start_round, check_round_rules
 
 game_state      db STATE_SELECT
 round_timer     dw ROUND_TIME_MAX   ; Relógio de 180 segundos
@@ -39,7 +40,8 @@ start_round:
     push    ax
 
     mov     word [round_timer], ROUND_TIME_MAX
-    call    player_init                    ;Funcao q inicializa player
+    mov     byte [match_winner], 0         ; Reseta o vencedor do round anterior
+    call    player_init                    ; Reinicia posições e HP dos jogadores
     mov     byte [game_state], STATE_PLAYING
 
     pop     ax
@@ -99,8 +101,8 @@ check_end_time:
     mov     al, [p1 + Player.hp]
     mov     ah, [p2 + Player.hp]
     cmp     al, ah
-    jge     .p1_wins_time                ; Se HP_P1 > HP_P2, Jogador 1 vence o round
-    jmp     .p2_wins_time                ; Se HP_P1 < HP_P2, Jogador 2 vence o round
+    jg     .p1_wins_time                ; Se HP_P1 > HP_P2, Jogador 1 vence o round
+    jl     .p2_wins_time                ; Se HP_P1 < HP_P2, Jogador 2 vence o round
 
     ; Se HP_P1 == HP_P2, aciona o critério de desempate (Morte Súbita)
     call    tie_breaker
@@ -151,6 +153,7 @@ register_round_win:
 
 .next_round:
     ; A partida ainda não acabou: avança para o próximo round
+    call player_erase_all
     inc     byte [current_round]
     call    start_round                ; Reinicia timer, HP, posições e zera match_winner
     jmp     .done_register

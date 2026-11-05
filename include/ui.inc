@@ -18,6 +18,8 @@ extern ui_draw_arena
 extern ui_draw_hud
 extern ui_draw_pause
 extern draw_rect_filled
+extern ui_draw_gameover
+extern ui_draw_confirm_quit
 
 %endif
 

@@ -13,8 +13,8 @@
 %include "ui.inc"
 %include "player.inc" 
 %include "action.inc"
-%include "timer.inc"
 %include "game.inc"
+%include "timer.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS / IMPORTADOS
@@ -22,9 +22,20 @@
 global main
 
 ; ------------------------------------------------------------------------------
+; ESTADO DO JOGO
+; ------------------------------------------------------------------------------
+; STATE_SELECT            equ 0  ; Seleção de personagem
+; STATE_PLAYING           equ 1  ; Jogo em andamento
+; STATE_PAUSED            equ 2  ; Jogo pausado
+; STATE_GAMEOVER          equ 3  ; Tela de Game Over
+
+; ------------------------------------------------------------------------------
 ; DS
 ; ------------------------------------------------------------------------------
 segment data
+
+; Estado atual do jogo - iniciando direto no jogo pra testes iniciais
+; game_state              db STATE_PLAYING
 
 ; Flag de execução do jogo
 game_running            db 1
@@ -34,11 +45,17 @@ p_key_was_pressed       db 0
 
 ; Pontos de Vida (HP) dos jogadores (0 a 10) 
 ; TODO: mover para player.asm. tá aqui somente pra testes
-hp_p1                   db 10 
-hp_p2                   db 10
+; hp_p1                   db 10 
+; hp_p2                   db 10
 
 ; Mensagem de encerramento
 msg_quit                db "Jogo encerrado com sucesso. Restaurando DOS...", 0Dh, 0Ah, "$"
+
+; Flag para desenhar a mensagem de game over apenas uma vez
+gameover_drawn          db 0
+
+; Guarda o estado anterior ao pedido de confirmacao de saida do jogo
+prev_game_state         db STATE_PLAYING
 
 ; ------------------------------------------------------------------------------
 ; CS
@@ -57,17 +74,15 @@ segment code
     ; Configura o Modo Gráfico VGA 12h (640x480, 16 cores)
     call    video_init
 
-    ; Instala a ISR customizada do teclado
+    ; Instala a ISR customizada do teclado (INT 9h) e do timer (INT 1Ch)
     call    kbd_init
-
-    ; Instala o tratador do temporizador de hardware (INT 1Ch)
     call    timer_init
 
     ; Desenha a moldura da arena e títulos
     call    ui_draw_arena
 
-    ; Inicializa as estruturas dos lutadores p1 e p2
-    call    player_init
+    ; Inicializa a partida (zera rounds, seta round_timer = 180, chama player_init e ativa STATE_PLAYING)
+    call    start_game
     ; TODO: Inicializar outros módulos e interrupts (timer...!)
 
 ; ------------------------------------------------------------------------------
@@ -83,7 +98,7 @@ segment code
     mov     al, SCANCODE_Q
     call    is_key_pressed
     cmp     al, 1
-    je      .trigger_quit
+    je      .handle_quit_key
 
     ; Tecla P: Alterna estado de pausa
     mov     al, SCANCODE_P
@@ -118,6 +133,18 @@ segment code
     call    ui_draw_arena                   ; Arena só precisa ser desenhada 1 vez
     jmp     .update_state
 
+.handle_quit_key:
+    ; Se já estamos na tela de confirmação, não sobrescreve prev_game_state
+    cmp     byte [game_state], STATE_CONFIRM_QUIT
+    je      .update_state
+
+    ; Salva o estado atual, muda para confirmação e desenha a caixa 1 vez
+    mov     al, [game_state]
+    mov     [prev_game_state], al
+    mov     byte [game_state], STATE_CONFIRM_QUIT
+    call    ui_draw_confirm_quit
+    jmp     .update_state
+
 .trigger_quit:
     mov     byte [game_running], 0
     jmp     .game_loop  ; Próximo loop vai detectar a flag e encerrar imediatamente
@@ -135,6 +162,9 @@ segment code
     cmp     al, STATE_PAUSED
     je      .state_paused_logic
 
+    cmp     al, STATE_CONFIRM_QUIT
+    je      .state_confirm_quit_logic
+
     cmp     al, STATE_GAMEOVER
     je      .state_gameover_logic
 
@@ -149,23 +179,52 @@ segment code
     ; Leitura de inputs de movimento dos lutadores
     call    player_update_input
 
-    ; Atualização da física e interações
+    ; Atualização da física, colisões e dano
     call    action_update
 
-    ; TODO: Processar dano e regras (game.asm)
+    ; Verifica se algum HP chegou a 0 (KO) ou se os 180s acabaram
+    call    check_round_rules
+
     jmp     .render_frame
 
 .state_paused_logic:
     jmp     .render_frame
 
 .state_gameover_logic:
-    ; TODO: Desenhar a tela de Game Over e placar final (ui.asm)
+    ; Desenha a caixa de Game Over apenas uma vez ao entrar no estado
+    cmp     byte [gameover_drawn], 1
+    je      .check_gameover_keys
+
+    mov     al, [match_winner]
+    call    ui_draw_gameover
+    mov     byte [gameover_drawn], 1
+
+.check_gameover_keys:
+    ; Tecla N: Encerra o jogo
+    mov     al, SCANCODE_N
+    call    is_key_pressed
+    cmp     al, 1
+    je      .trigger_quit
+
+    ; Tecla Y: Reinicia a partida
+    mov     al, SCANCODE_Y
+    call    is_key_pressed
+    cmp     al, 1
+    jne     .render_frame
+
+    ; Limpa a tela/arena e reinicia a partida
+    mov     byte [gameover_drawn], 0
+    call    video_init
+    call    ui_draw_arena
+    call    start_game
     jmp     .render_frame
 
 .render_frame:
     ; VSYNC!!! Aguarda a placa de vídeo entrar em Retrace Vertical 
     ; para desenhar/atualizar os elementos, evitando screen-tearing e reduzindo flickering
     call video_wait_vsync
+
+    cmp     byte [game_state], STATE_PLAYING
 
     ; Limpa sprites do frame anterior e renderiza os novos
     call    player_erase_all
@@ -178,12 +237,51 @@ segment code
 
     jmp     .game_loop
 
+.draw_hud_only:
+    mov     al, [p1 + Player.hp]
+    mov     ah, [p2 + Player.hp]
+    call    ui_draw_hud
+    jmp     .game_loop
+
+
+.state_confirm_quit_logic:
+    ; Tecla Y: Confirma a saída e encerra o jogo
+    mov     al, SCANCODE_Y
+    call    is_key_pressed
+    cmp     al, 1
+    je      .trigger_quit
+
+    ; Tecla N: Cancela e retorna ao estado anterior
+    mov     al, SCANCODE_N
+    call    is_key_pressed
+    cmp     al, 1
+    jne     .render_frame
+
+    ; Restaura o estado salvo antes de apertar Q
+    mov     al, [prev_game_state]
+    mov     [game_state], al
+
+    cmp     al, STATE_PAUSED
+    je      .restore_paused_ui
+    cmp     al, STATE_GAMEOVER
+    je      .restore_gameover_ui
+
+    ; Se retornou para STATE_PLAYING, redesenha a arena (apaga a caixa central)
+    call    ui_draw_arena
+    jmp     .render_frame
+
+.restore_paused_ui:
+    call    ui_draw_pause
+    jmp     .render_frame
+
+.restore_gameover_ui:
+    mov     byte [gameover_drawn], 0
+    jmp     .render_frame
+
 ; Restauração do estado pré-execução e retorno ao DOS
 .exit_game:
-    ; Instala o tratador do temporizador de hardware (INT 1Ch)
-    call    timer_init
-    
-    ; Restaura a ISR original da INT 9h
+    ; Restaura as ISRs originais (INT 1Ch e INT 9h)
+    call    timer_restore
     call    kbd_restore
 
     ; Restaura o modo de vídeo original do sistema
