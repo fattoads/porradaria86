@@ -3,13 +3,65 @@
 ; DESCRIÇÃO: Renderização da interface do usuário (Arena, HUD, Barras de HP e Pausa)
 ; AUTORIA: Enrico Polez, Felipe Bruno, Vitor Tomé
 ; ==============================================================================
+%define UI_ASM
 
 %include "linec.inc"
+%include "ui.inc"
 
 global ui_draw_arena
 global ui_draw_hud
 global ui_draw_pause
 global draw_rect_filled
+
+global WALL_LEFT
+global WALL_RIGHT
+global FLOOR_Y
+
+; Constantes da interface
+PAUSE_X                 equ     230
+PAUSE_Y                 equ     220
+PAUSE_W                 equ     181
+PAUSE_H                 equ     41 
+
+BORDER_TOP_X1           equ     20 
+BORDER_TOP_Y1           equ     70 
+BORDER_TOP_X2           equ     619
+BORDER_TOP_Y2           equ     70 
+
+BORDER_BASE_X1          equ     20 
+BORDER_BASE_Y1          equ     460
+BORDER_BASE_X2          equ     619
+BORDER_BASE_Y2          equ     460
+
+BORDER_LEFT_X1          equ     20 
+BORDER_LEFT_Y1          equ     70 
+BORDER_LEFT_X2          equ     20 
+BORDER_LEFT_Y2          equ     460
+
+BORDER_RIGHT_X1         equ     619
+BORDER_RIGHT_Y1         equ     70 
+BORDER_RIGHT_X2         equ     619
+BORDER_RIGHT_Y2         equ     460
+
+ARENA_TOP_X1            equ     24 
+ARENA_TOP_Y1            equ     74 
+ARENA_TOP_X2            equ     615
+ARENA_TOP_Y2            equ     74 
+                    
+ARENA_BASE_X1           equ     24 
+ARENA_BASE_Y1           equ     456
+ARENA_BASE_X2           equ     615
+ARENA_BASE_Y2           equ     456
+                    
+ARENA_LEFT_X1           equ     24 
+ARENA_LEFT_Y1           equ     74 
+ARENA_LEFT_X2           equ     24 
+ARENA_LEFT_Y2           equ     456
+
+ARENA_RIGHT_X1          equ     615 
+ARENA_RIGHT_Y1          equ     74  
+ARENA_RIGHT_X2          equ     615 
+ARENA_RIGHT_Y2          equ     456 
 
 ; ------------------------------------------------------------------------------
 ; DS
@@ -131,10 +183,10 @@ ui_draw_arena:
     ; Não sei se é a solução ideal, mas por enquanto funciona.
     ; --- LIMPA TELA DE PAUSA ---
     mov byte [cor], preto 
-    push word 230               ; X 
-    push word 220               ; Y 
-    push word 181               ; W
-    push word 41                ; H
+    push word PAUSE_X 
+    push word PAUSE_Y 
+    push word PAUSE_W
+    push word PAUSE_H
     call draw_rect_filled
 
     ; Define cor branca intensa para a moldura da arena
@@ -142,54 +194,54 @@ ui_draw_arena:
 
     ; --- BORDA EXTERNA ---
     ; Topo
-    push    word 20             ; X1
-    push    word 70             ; Y1
-    push    word 619            ; X2
-    push    word 70             ; Y2
+    push    word BORDER_TOP_X1
+    push    word BORDER_TOP_Y1
+    push    word BORDER_TOP_X2
+    push    word BORDER_TOP_Y2
     call    line
     ; Base
-    push    word 20             ; X1
-    push    word 460            ; Y1
-    push    word 619            ; X2
-    push    word 460            ; Y2
+    push    word BORDER_BASE_X1 
+    push    word BORDER_BASE_Y1 
+    push    word BORDER_BASE_X2 
+    push    word BORDER_BASE_Y2 
     call    line
     ; Esquerda
-    push    word 20             ; X1
-    push    word 70             ; Y1
-    push    word 20             ; X2
-    push    word 460            ; Y2
+    push    word BORDER_LEFT_X1 
+    push    word BORDER_LEFT_Y1 
+    push    word BORDER_LEFT_X2 
+    push    word BORDER_LEFT_Y2 
     call    line
     ; Direita
-    push    word 619            ; X1
-    push    word 70             ; Y1
-    push    word 619            ; X2
-    push    word 460            ; Y2
+    push    word BORDER_RIGHT_X1
+    push    word BORDER_RIGHT_Y1
+    push    word BORDER_RIGHT_X2
+    push    word BORDER_RIGHT_Y2
     call    line
 
     ; --- BORDA INTERNA ---
     ; Topo
-    push    word 24             ; X1
-    push    word 74             ; Y1
-    push    word 615            ; X2
-    push    word 74             ; Y2
+    push    word ARENA_TOP_X1            
+    push    word ARENA_TOP_Y1            
+    push    word ARENA_TOP_X2            
+    push    word ARENA_TOP_Y2            
     call    line
     ; Base
-    push    word 24             ; X1
-    push    word 456            ; Y1
-    push    word 615            ; X2
-    push    word 456            ; Y2
+    push    word ARENA_BASE_X1           
+    push    word ARENA_BASE_Y1           
+    push    word ARENA_BASE_X2           
+    push    word ARENA_BASE_Y2           
     call    line
     ; Esquerda
-    push    word 24             ; X1
-    push    word 74             ; Y1
-    push    word 24             ; X2
-    push    word 456            ; Y2
+    push    word ARENA_LEFT_X1           
+    push    word ARENA_LEFT_Y1           
+    push    word ARENA_LEFT_X2           
+    push    word ARENA_LEFT_Y2           
     call    line
     ; Direita
-    push    word 615            ; X1
-    push    word 74             ; Y1
-    push    word 615            ; X2
-    push    word 456            ; Y2
+    push    word ARENA_RIGHT_X1          
+    push    word ARENA_RIGHT_Y1          
+    push    word ARENA_RIGHT_X2          
+    push    word ARENA_RIGHT_Y2          
     call    line
 
     ; --- TÍTULOS ---

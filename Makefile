@@ -1,7 +1,7 @@
 # Ferramentas
 ASM      = nasm
 ASMFLAGS = -f obj -g -Iinclude/
-LD       = make ./ALINK.EXE	#Para linux descomentar a parte wine
+LD       = ./ALINK.EXE	#Para linux descomentar a parte wine
 
 # Nome do Executável Final
 TARGET   = jogo.exe
@@ -19,7 +19,7 @@ OBJS     = $(BUILD_DIR)/main.obj \
            $(BUILD_DIR)/timer.obj \
            $(BUILD_DIR)/ui.obj \
            $(BUILD_DIR)/player.obj \
-           $(BUILD_DIR)/physics.obj \
+           $(BUILD_DIR)/action.obj \
            $(BUILD_DIR)/game.obj
 
 # Alvo Padrão
