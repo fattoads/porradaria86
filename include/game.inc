@@ -17,9 +17,13 @@ STATE_GAMEOVER      equ 5
 ROUND_TIME_MAX      equ 180   ; 3 minutos = 180 segundos
 ROUNDS_TO_WIN       equ 2     ; Melhor de 3 (quem fizer 2 vence)
 
+%ifndef GAME_ASM
+
 ; Variáveis e funções exportadas pelo game.asm
-EXTERN game_state, round_timer, match_winner
-EXTERN game_init_match, game_init_round, game_update_rules
-EXTERN game_handle_select, game_handle_gameover
+extern game_state, round_timer, match_winner
+extern game_init_match, game_init_round, game_update_rules
+extern game_handle_select, game_handle_gameover
+
+%endif
 
 %endif
