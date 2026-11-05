@@ -13,6 +13,7 @@
 %include "ui.inc"
 %include "player.inc" 
 %include "action.inc"
+%include "timer.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS / IMPORTADOS
@@ -68,6 +69,9 @@ segment code
 
     ; Instala a ISR customizada do teclado
     call    kbd_init
+
+    ; Instala o tratador do temporizador de hardware (INT 1Ch)
+    call    timer_init
 
     ; Desenha a moldura da arena e títulos
     call    ui_draw_arena
@@ -186,6 +190,9 @@ segment code
 
 ; Restauração do estado pré-execução e retorno ao DOS
 .exit_game:
+    ; Instala o tratador do temporizador de hardware (INT 1Ch)
+    call    timer_init
+    
     ; Restaura a ISR original da INT 9h
     call    kbd_restore
 
