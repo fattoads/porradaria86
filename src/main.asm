@@ -360,11 +360,19 @@ segment code
     cmp     al, 1
     jne     .render_frame
 
-    ; Limpa a tela/arena e reinicia a partida
+    ; Reseta as flags de controle da seleção
     mov     byte [gameover_drawn], 0
+    mov     byte [select_step], 0
+    mov     byte [select_needs_redraw], 1
+    
+    ; Reseta os rounds dos jogadores para uma nova partida limpa
+    mov     byte [p1 + Player.rounds], 0
+    mov     byte [p2 + Player.rounds], 0
+
+    ; Restaura o visual da arena e transita para o estado de seleção
     call    video_init
     call    ui_draw_arena
-    call    start_game
+    mov     byte [game_state], STATE_SELECT
     jmp     .render_frame
 
 .render_frame:
