@@ -23,6 +23,12 @@ global clash_occurred, clash_x, clash_y
 ; ------------------------------------------------------------------------------
 segment data
 
+; Buffers de hit/hurtbox: X, Y, W, H
+hb1:    times 4 dw 0 
+hb2:    times 4 dw 0 
+hurt1:  times 4 dw 0 
+hurt2:  times 4 dw 0
+
 ; ------------------------------------------------------------------------------
 ; CS
 ; ------------------------------------------------------------------------------
@@ -88,6 +94,128 @@ check_aabb_collision:
     pop     bx
     pop     bp
     ret     16                  ; Limpa 8 parâmetros de 2 bytes (16 bytes)
+
+; ------------------------------------------------------------------------------
+; check_rect_collision: Wrapper para check_aabb_collision que recebe endereços de 2 retângulos.
+; Entrada:
+;   SI = ptr para Retângulo 1
+;   DI = ptr para Retângulo 2
+; Saída: 
+;   AL = 1 (Houve colisão) ou 0 (Não houve colisão)
+; ------------------------------------------------------------------------------
+check_rect_collision:
+    push    word [si]           ; X1
+    push    word [si+2]         ; Y1
+    push    word [si+4]         ; W1
+    push    word [si+6]         ; H1
+    push    word [di]           ; X2
+    push    word [di+2]         ; Y2
+    push    word [di+4]         ; W2
+    push    word [di+6]         ; H2
+    call    check_aabb_collision
+    ret
+
+; ------------------------------------------------------------------------------
+; get_player_hitbox: Calcula a Hitbox (X, Y, W, H) do jogador apontado por SI
+;                    e armazena a estrutura no buffer apontado por DI.
+; Entrada: 
+;   SI = ptr para Player
+;   DI = ptr para buffer de destino (4 words)
+; ------------------------------------------------------------------------------
+get_player_hitbox:
+    ; Salva estado
+    push    ax
+    push    bx
+    push    cx
+    push    dx
+
+    cmp     byte [si + Player.attack_type], ATTACK_TYPE_KICK
+    je      .kick_dim
+    
+    ; Dimensões do soco
+    mov     cx, PUNCH_WIDTH
+    mov     dx, PUNCH_HEIGHT
+    mov     bx, [si + Player.y]
+    sub     bx, 60                      ; Y do soco
+    jmp     .calc_x
+
+.kick_dim:
+    ; Dimensões do chute
+    mov     cx, KICK_WIDTH
+    mov     dx, KICK_HEIGHT
+    mov     bx, [si + Player.y]
+    sub     bx, 30                      ; Y do chute
+
+.calc_x:
+    ; Alcance do ataque no eixo x
+    mov     ax, [si + Player.x]
+    cmp     byte [si + Player.dir], DIR_RIGHT
+    jne     .left_dir
+    add     ax, 15
+    jmp     .store_hitbox
+
+.left_dir:
+    sub     ax, 15
+    sub     ax, cx                      ; X = x - 15 - W
+
+.store_hitbox:
+    mov     [di], ax                    ; X 
+    mov     [di + 2], bx                ; Y 
+    mov     [di + 4], cx                ; W 
+    mov     [di + 6], dx                ; H
+
+    ; Restaura estado
+    pop     dx 
+    pop     cx 
+    pop     bx 
+    pop     ax 
+    ret
+
+; ------------------------------------------------------------------------------
+; get_player_hurtbox: Calcula a Hurtbox (X, Y, W, H) do jogador apontado por SI
+;                     e armazena a estrutura no buffer apontado por DI.
+; Entrada:
+;   SI = ptr para Player
+;   DI = ptr para buffer de destino (4 words)
+; ------------------------------------------------------------------------------
+get_player_hurtbox:
+    ; Salva estado
+    push    ax
+    push    bx
+    push    cx
+    push    dx
+
+    mov     ax, [si + Player.x]
+    sub     ax, 15                      ; X = x - 15
+    mov     cx, PLAYER_WIDTH            ; W = 30
+
+    cmp     byte [si + Player.state], STATE_CROUCH
+    je      .crouch_hurt
+
+    ; Altura do player normal
+    mov     bx, [si + Player.y]
+    sub     bx, PLAYER_HEIGHT           ; Y = y - 70
+    mov     dx, PLAYER_HEIGHT           ; H = 70
+    jmp     .store_hurtbox
+
+.crouch_hurt:
+    ; Altura do player agachado
+    mov     bx, [si + Player.y]
+    sub     bx, CROUCH_HEIGHT           ; Y = y - 35
+    mov     dx, CROUCH_HEIGHT           ; H = 35
+
+.store_hurtbox:
+    mov     [di], ax                    ; X
+    mov     [di + 2], bx                ; Y
+    mov     [di + 4], cx                ; W
+    mov     [di + 6], dx                ; H
+
+    ; Restaura estado
+    pop     dx
+    pop     cx
+    pop     bx
+    pop     ax
+    ret
 
 ; ------------------------------------------------------------------------------
 ; action_update: Executa a física, gravidade, limites, repulsão e combate
@@ -186,6 +314,12 @@ action_update:
 
     ; --- FÍSICA DO JOGADOR 1 ---
 .update_p1_physics:
+    ; Enquanto agachado, jogador não pode se mexer
+    cmp     byte [p1 + Player.state], STATE_CROUCH
+    jne     .p1_apply_vx
+    mov     word [p1 + Player.vx], 0
+
+.p1_apply_vx:
     ; Posição X += Velocidade X
     mov     ax, [p1 + Player.vx]
     add     [p1 + Player.x], ax
@@ -194,6 +328,7 @@ action_update:
     cmp     word [p1 + Player.x], (WALL_LEFT + 12)      ; Se estamos à direita da parede esquerda, verificamos a parede direita
     jge     .p1_right_wall
     mov     word [p1 + Player.x], (WALL_LEFT + 12)      ; Caso contrário, colamos à esquerda
+
 .p1_right_wall:
     cmp     word [p1 + Player.x], (WALL_RIGHT - 12)     ; Se estamos à esquerda da parede direita, prosseguimos pra física vertical
     jle     .p1_vertical
@@ -219,12 +354,21 @@ action_update:
 
     ; --- FÍSICA DO JOGADOR 2 ---
 .update_p2_physics:
+    ; Enquanto agachado, jogador não pode se mexer
+    cmp     byte [p2 + Player.state], STATE_CROUCH
+    jne     .p2_apply_vx
+    mov     word [p2 + Player.vx], 0
+
+.p2_apply_vx:
+    ; Posição X += Velocidade X
     mov     ax, [p2 + Player.vx]
     add     [p2 + Player.x], ax
 
+    ; Delimitação das Paredes da Arena
     cmp     word [p2 + Player.x], (WALL_LEFT + 12)     ; Se estamos à direita da parede esquerda, verificamos a parede direita
     jge     .p2_right_wall
     mov     word [p2 + Player.x], (WALL_LEFT + 12)     ; Caso contrário, colamos à esquerda
+
 .p2_right_wall:
     cmp     word [p2 + Player.x], (WALL_RIGHT - 12)    ; Se estamos à esquerda da parede direita, prosseguimos pra física vertical
     jle     .p2_vertical
@@ -273,106 +417,57 @@ action_update:
 
     ; --- DETECÇÃO DE COMBATE E HITBOXES ---
 .combat_collisions:
-    ; Hitbox X do P1
-    mov     ax, [p1 + Player.x]
-    cmp     byte [p1 + Player.dir], DIR_RIGHT
-    jne     .p1_hb_left
-    add     ax, 15
-    jmp     .store_hb1
-.p1_hb_left:
-    sub     ax, (15 + ATTACK_WIDTH)
-.store_hb1:
-    mov     cx, ax                      ; CX = HB1_X
-    mov     dx, [p1 + Player.y]
-    sub     dx, 50                      ; DX = HB1_Y
+    ; Salvamos as hit/hurtboxes nos buffers
+    mov     si, p1
+    mov     di, hb1
+    call    get_player_hitbox
 
-    ; Hitbox X do P2
-    mov     ax, [p2 + Player.x]
-    cmp     byte [p2 + Player.dir], DIR_RIGHT
-    jne     .p2_hb_left
-    add     ax, 15
-    jmp     .store_hb2
-.p2_hb_left:
-    sub     ax, (15 + ATTACK_WIDTH)
-.store_hb2:
-    mov     bx, ax                      ; BX = HB2_X
-    mov     di, [p2 + Player.y]
-    sub     di, 50                      ; DI = HB2_Y
+    mov     si, p2
+    mov     di, hb2
+    call    get_player_hitbox
 
-    ; --- CHECAGEM DE CLASH ---
+    mov     si, p1
+    mov     di, hurt1
+    call    get_player_hurtbox
+
+    mov     si, p2
+    mov     di, hurt2
+    call    get_player_hurtbox
+
+    ; Se algum dos dois não está atacando, não precisamos analisar a possibilidade de clash
     cmp     byte [p1 + Player.attack_active], 1
     jne     .check_p1_hit
     cmp     byte [p2 + Player.attack_active], 1
     jne     .check_p1_hit
 
-    mov     ax, [p2 + Player.x]
-    sub     ax, 15                      ; Hurtbox P2 X
-    mov     si, [p2 + Player.y]
-    sub     si, PLAYER_HEIGHT           ; Hurtbox P2 Y
+    ; Como ambos estão atacando, verificamos se ambos se atingiram ao mesmo tempo
+    mov     si, hb1
+    mov     di, hurt2
+    call    check_rect_collision
+    push    ax                          ; Salva 1 se HB1 acerta HURT2
 
-    push    cx
-    push    dx
-    push    word ATTACK_WIDTH
-    push    word ATTACK_HEIGHT
-    push    ax
-    push    si
-    push    word PLAYER_WIDTH
-    push    word PLAYER_HEIGHT
-    call    check_aabb_collision
-    push    ax                          ; Salva resultado (1 se P1 acerta P2)
-
-    mov     ax, [p1 + Player.x]
-    sub     ax, 15                      ; Hurtbox P1 X
-    mov     si, [p1 + Player.y]
-    sub     si, PLAYER_HEIGHT           ; Hurtbox P1 Y
-
-    push    bx
-    push    di
-    push    word ATTACK_WIDTH
-    push    word ATTACK_HEIGHT
-    push    ax
-    push    si
-    push    word PLAYER_WIDTH
-    push    word PLAYER_HEIGHT
-    call    check_aabb_collision        ; AL = 1 se P2 acerta P1
-
-    pop     bx                          ; BL = resultado de P1 acertar P2
-    and     al, bl
+    mov     si, hb2
+    mov     di, hurt1
+    call    check_rect_collision        ; AL = 1 se HB2 acerta HURT1
+    pop     bx                          ; BL = 1 se HB1 acerta HURT2
+    and     al, bl                      ; 1 se os dois acertaram
     cmp     al, 1
-    je      .trigger_clash              ; Se ambos se acertaram no mesmo frame, ocorre um clash
-    jmp     .check_p1_hit
+    je      .trigger_clash
 
-.trigger_clash:
-    mov     byte [p1 + Player.attack_active], 0
-    mov     byte [p2 + Player.attack_active], 0
-    mov     byte [p1 + Player.stun_timer], 10
-    mov     byte [p2 + Player.stun_timer], 10
-    mov     word [p1 + Player.vx], -6
-    mov     word [p2 + Player.vx], 6
-    jmp     .done_action
-
-    ; --- HIT: P1 Ataca P2 ---
+    ; --- P1 Atacando P2 ---
 .check_p1_hit:
+    ; Houve um ataque?
     cmp     byte [p1 + Player.attack_active], 1
     jne     .check_p2_hit
 
-    mov     ax, [p2 + Player.x]
-    sub     ax, 15                      ; Hurtbox P2 X
-    mov     si, [p2 + Player.y]
-    sub     si, PLAYER_HEIGHT           ; Hurtbox P2 Y
-
-    push    cx
-    push    dx
-    push    word ATTACK_WIDTH
-    push    word ATTACK_HEIGHT
-    push    ax
-    push    si
-    push    word PLAYER_WIDTH
-    push    word PLAYER_HEIGHT
-    call    check_aabb_collision
+    ; O ataque conectou?
+    mov     si, hb1
+    mov     di, hurt2
+    call    check_rect_collision
     cmp     al, 1
     jne     .check_p2_hit
 
+    ; Resultado do ataque
     mov     byte [p1 + Player.attack_active], 0 ; Ataque desativa ao conectar com o oponente
     mov     byte [p2 + Player.state], STATE_HIT
     mov     byte [p2 + Player.stun_timer], 12
@@ -389,28 +484,20 @@ action_update:
     je      .check_p2_hit
     mov     word [p2 + Player.vx], -8
 
-    ; --- HIT: P2 Ataca P1 ---
+    ; --- P2 Atacando P1 ---
 .check_p2_hit:
+    ; Houve um ataque?
     cmp     byte [p2 + Player.attack_active], 1
     jne     .done_action
 
-    mov     ax, [p1 + Player.x]
-    sub     ax, 15                      ; Hurtbox P1 X
-    mov     si, [p1 + Player.y]
-    sub     si, PLAYER_HEIGHT           ; Hurtbox P1 Y
-
-    push    bx
-    push    di
-    push    word ATTACK_WIDTH
-    push    word ATTACK_HEIGHT
-    push    ax
-    push    si
-    push    word PLAYER_WIDTH
-    push    word PLAYER_HEIGHT
-    call    check_aabb_collision
+    ; O ataque conectou?
+    mov     si, hb2
+    mov     di, hurt1
+    call    check_rect_collision
     cmp     al, 1
     jne     .done_action
 
+    ; Resultado do ataque
     mov     byte [p2 + Player.attack_active], 0 ; Ataque desativa ao conectar com o oponente
     mov     byte [p1 + Player.state], STATE_HIT
     mov     byte [p1 + Player.stun_timer], 12
@@ -426,6 +513,15 @@ action_update:
     cmp     byte [p2 + Player.dir], DIR_LEFT
     je      .done_action
     mov     word [p1 + Player.vx], 8
+    jmp     .done_action
+
+.trigger_clash:
+    mov     byte [p1 + Player.attack_active], 0
+    mov     byte [p2 + Player.attack_active], 0
+    mov     byte [p1 + Player.stun_timer], 10
+    mov     byte [p2 + Player.stun_timer], 10
+    mov     word [p1 + Player.vx], -6
+    mov     word [p2 + Player.vx], 6
 
 .done_action:
     ; Restaura estado
