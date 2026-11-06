@@ -9,10 +9,12 @@
 ; Funções exportadas de kbd.asm
 extern kbd_init
 extern kbd_restore
+extern is_key_pressed
+extern get_key_event
 
 ; Variáveis exportadas de kbd.asm
-extern is_key_pressed
 extern key_states
+extern key_events
 
 ; ------------------------------------------------------------------------------
 ; Mapeamento dos Scan Codes (Make Codes) de teclas usadas no jogo

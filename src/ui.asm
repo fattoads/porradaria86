@@ -151,42 +151,47 @@ draw_rect_filled:
     ret     8
 
 ; ------------------------------------------------------------------------------
-; ui_print_string: Imprime uma string terminada em zero em uma posição da tela.
+; ui_print_string: Imprime uma string terminada em zero no buffer RAM off-screen.
 ; Utiliza a cor definida na variável global 'cor'.
 ; Entrada:
 ;   SI = Endereço da string
-;   DH = Linha do cursor (0 a 29)
-;   DL = Coluna do cursor (0 a 79)
+;   DH = Linha do texto (0 a 29)
+;   DL = Coluna do texto (0 a 79)
 ; ------------------------------------------------------------------------------
 ui_print_string:
-    ; Salva estado
     push    ax
     push    bx
+    push    cx
     push    dx
     push    si
 
-    mov     bl, [cor]
+    ; X = DL * 8 (0 a 632 pixels)
+    mov     al, dl
+    mov     bl, 8
+    mul     bl
+    mov     cx, ax              ; Preserva X em CX
 
-    ; Posicionando cursor
-    mov     ah, 02h             ; Seleciona função de posicionar cursor
-    mov     bh, 0               ; Seleciona página de vídeo 0
-    int     10h                 ; Chama serviço de vídeo da BIOS
+    ; Y = DH * 16 (0 a 464 pixels)
+    mov     al, dh
+    mov     bl, 16
+    mul     bl                  ; AX = Y em pixels
+
+    push    cx                  ; Passa X para cursor
+    push    ax                  ; Passa Y para cursor
+    call    cursor              ; Salva cursor_x e cursor_y e limpa a pilha (ret 4)
 
 .char_loop:
-    lodsb                       ; Carrega o byte de [DS:SI] em AL e incrementa SI
+    lodsb                       ; Carrega [DS:SI] em AL e inc SI
     cmp     al, 0
     je      .done
 
-    ; Imprimindo caractere
-    mov     ah, 0Eh             ; Seleciona função de saída de caractere
-    mov     bh, 0               ; Seleciona página de vídeo 0
-    int     10h                 ; Chama serviço de vídeo da BIOS
+    call    caracter            ; Renderiza a letra na RAM via plot_xy
     jmp     .char_loop
 
 .done:
-    ; Restaura estado
     pop     si
     pop     dx
+    pop     cx
     pop     bx
     pop     ax
     ret

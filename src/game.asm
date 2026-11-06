@@ -153,7 +153,6 @@ register_round_win:
 
 .next_round:
     ; A partida ainda não acabou: avança para o próximo round
-    call player_erase_all
     inc     byte [current_round]
     call    start_round                ; Reinicia timer, HP, posições e zera match_winner
     jmp     .done_register

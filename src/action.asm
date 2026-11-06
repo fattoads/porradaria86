@@ -230,6 +230,22 @@ action_update:
     push    si
     push    di
 
+    ; --- Animação P1 ---
+    inc     byte [p1 + Player.anim_timer]
+    cmp     byte [p1 + Player.anim_timer], 10    ; Troca de frame a cada 10 quadros
+    jl      .update_p2_anim
+    mov     byte [p1 + Player.anim_timer], 0
+    xor     byte [p1 + Player.anim_frame], 1    ; Alterna entre 0 e 1
+
+.update_p2_anim:
+    ; --- Animação P2 ---
+    inc     byte [p2 + Player.anim_timer]
+    cmp     byte [p2 + Player.anim_timer], 10
+    jl      .anim_timers_done
+    mov     byte [p2 + Player.anim_timer], 0
+    xor     byte [p2 + Player.anim_frame], 1
+
+.anim_timers_done:
     ; --- Atualização de timers de stun e ataque ---
     ; O ataque é separado em 3 estados, que correspondem a intervalos diferentes de valores do timer.
     ; Startup: Timer de 12 a 10 - Ataque sujeito a clash
@@ -470,7 +486,7 @@ action_update:
     ; Resultado do ataque
     mov     byte [p1 + Player.attack_active], 0 ; Ataque desativa ao conectar com o oponente
     mov     byte [p2 + Player.state], STATE_HIT
-    mov     byte [p2 + Player.stun_timer], 12
+    mov     byte [p2 + Player.stun_timer], 9
     mov     byte [p2 + Player.attack_active], 0 ; Cancela qualquer ataque do P2
     mov     byte [p2 + Player.attack_timer], 0  ; Zera o timer de ataque do P2
 
@@ -500,7 +516,7 @@ action_update:
     ; Resultado do ataque
     mov     byte [p2 + Player.attack_active], 0 ; Ataque desativa ao conectar com o oponente
     mov     byte [p1 + Player.state], STATE_HIT
-    mov     byte [p1 + Player.stun_timer], 12
+    mov     byte [p1 + Player.stun_timer], 9
     mov     byte [p1 + Player.attack_active], 0 ; Cancela qualquer ataque do P1
     mov     byte [p1 + Player.attack_timer], 0  ; Zera o timer de ataque do P1
 

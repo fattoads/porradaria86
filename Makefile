@@ -20,6 +20,7 @@ OBJS     = $(BUILD_DIR)/main.obj \
            $(BUILD_DIR)/ui.obj \
            $(BUILD_DIR)/player.obj \
            $(BUILD_DIR)/action.obj \
+		   $(BUILD_DIR)/sprite.obj \
            $(BUILD_DIR)/game.obj
 
 # Alvo Padrão

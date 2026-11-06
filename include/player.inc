@@ -45,12 +45,13 @@ STRUC Player
     .attack_timer   resb 1    ; Frames restantes da janela de ataque
     .attack_type    resb 1    ; 0 = ATTACK_TYPE_PUNCH, 1 = ATTACK_TYPE_KICK
     .stun_timer     resb 1    ; Frames de atordoamento/recuperação
+    .anim_frame     resb 1    ; Frame atual da animação (0 ou 1) 
+    .anim_timer     resb 1    ; Contador de ciclos para trocar o frame
 .size:
 ENDSTRUC
 
 %ifndef PLAYER_ASM
 extern player_init
-extern player_erase_all
 extern player_draw_all
 extern player_update_input
 extern p1
