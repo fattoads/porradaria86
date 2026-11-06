@@ -36,9 +36,6 @@ p_key_was_pressed       db 0
 ; Mensagem de encerramento
 msg_quit                db "Jogo encerrado com sucesso. Restaurando DOS...", 0Dh, 0Ah, "$"
 
-; Flag para desenhar a mensagem de game over apenas uma vez
-gameover_drawn          db 0
-
 ; Guarda o estado anterior ao pedido de confirmacao de saida do jogo
 prev_game_state         db STATE_PLAYING
 
@@ -47,8 +44,6 @@ color_palette           db cyan_claro, rosa, verde, vermelho
 p1_color_idx            db 0            ; Índice inicial P1 (0 = cyan_claro)
 p2_color_idx            db 1            ; Índice inicial P2 (1 = rosa)
 select_step             db 0            ; 0 = P1 escolhendo, 1 = P2 escolhendo
-select_needs_redraw     db 1            ; 1 = Precisa redesenhar a caixa de seleção
-select_key_lock         db 0            ; Debounce para teclas do menu (W/S/Setas/Enter)
 
 ; ------------------------------------------------------------------------------
 ; CS
@@ -71,9 +66,6 @@ segment code
     call    kbd_init
     call    timer_init
 
-    ; Desenha a moldura da arena e títulos
-    call    ui_draw_arena
-
     ; Inicializa posições dos lutadores e configura estado inicial para seleção
     call    player_init
     mov     byte [p1 + Player.color], cyan_claro
@@ -91,29 +83,25 @@ segment code
     cmp     byte [game_running], 0
     je      .exit_game
 
+    ; Limpa a tela
+    call video_clear
+
     ; Primeiro, consideramos as teclas que afetam o estado global do jogo (pausa e encerramento).
     ; Tecla Q: Encerra a aplicação
     mov     al, SCANCODE_Q
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .handle_quit_key
 
     ; Tecla P: Alterna estado de pausa
     mov     al, SCANCODE_P
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .handle_pause_key
     
-    ; Se P não está apertada, reseta o flag de debounce
-    mov     byte [p_key_was_pressed], 0
     jmp     .update_state
 
 .handle_pause_key:
-    ; Só alterna a pausa se a tecla P não estava pressionada no quadro anterior
-    cmp     byte [p_key_was_pressed], 0
-    jne     .update_state
-    mov     byte [p_key_was_pressed], 1     ; Marca que P está pressionada
-
     ; Inverte o estado entre PLAYING e PAUSED
     cmp     byte [game_state], STATE_PLAYING
     je      .set_paused
@@ -123,12 +111,10 @@ segment code
 
 .set_paused:
     mov     byte [game_state], STATE_PAUSED
-    call    ui_draw_pause                  ; Tela de pausa só precisa ser desenhada 1 vez
     jmp     .update_state
 
 .set_playing:
     mov     byte [game_state], STATE_PLAYING
-    call    ui_draw_arena                   ; Arena só precisa ser desenhada 1 vez
     jmp     .update_state
 
 .handle_quit_key:
@@ -140,7 +126,6 @@ segment code
     mov     al, [game_state]
     mov     [prev_game_state], al
     mov     byte [game_state], STATE_CONFIRM_QUIT
-    call    ui_draw_confirm_quit
     jmp     .update_state
 
 .trigger_quit:
@@ -167,7 +152,7 @@ segment code
     je      .state_gameover_logic
 
     ; unreachable, mas sempre terminamos com a renderização
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .state_select_logic:
     ; Atualiza as cores nas structs para visualização em tempo real dos bonecos
@@ -180,60 +165,27 @@ segment code
     mov     al, [color_palette + bx]
     mov     [p2 + Player.color], al
 
-    ; Redesenha o menu apenas quando houver mudança
-    cmp     byte [select_needs_redraw], 0
-    je      .check_select_input
+    ; --- Leitura dos inputs do menu ---
 
-    mov     al, [p1_color_idx]
-    mov     ah, [p2_color_idx]
-    mov     bl, [select_step]
-    call    ui_draw_select
-    mov     byte [select_needs_redraw], 0
-
-.check_select_input:
-    ; Se uma tecla do menu ainda está segurada, aguarda soltar todas (debounce)
-    cmp     byte [select_key_lock], 0
-    je      .read_select_keys
-
-    mov     al, SCANCODE_W
-    call    is_key_pressed
-    mov     bl, al
-    mov     al, SCANCODE_S
-    call    is_key_pressed
-    or      bl, al
-    mov     al, SCANCODE_UP
-    call    is_key_pressed
-    or      bl, al
-    mov     al, SCANCODE_DOWN
-    call    is_key_pressed
-    or      bl, al
-    mov     al, SCANCODE_ENTER
-    call    is_key_pressed
-    or      bl, al
-    cmp     bl, 0
-    jne     .render_frame
-    mov     byte [select_key_lock], 0
-
-.read_select_keys:
     cmp     byte [select_step], 0
     je      .p1_select_turn
 
     ; --- VEZ DO JOGADOR 2 (Setas Cima/Baixo e Enter) ---
     mov     al, SCANCODE_UP
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .p2_prev_color
 
     mov     al, SCANCODE_DOWN
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .p2_next_color
 
     mov     al, SCANCODE_ENTER
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .confirm_p2_and_start
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .p2_prev_color:
     dec     byte [p2_color_idx]
@@ -241,9 +193,7 @@ segment code
     mov     al, [p2_color_idx]
     cmp     al, [p1_color_idx]
     je      .p2_prev_color              ; Pula a cor já escolhida pelo P1
-    mov     byte [select_key_lock], 1
-    mov     byte [select_needs_redraw], 1
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .p2_next_color:
     inc     byte [p2_color_idx]
@@ -251,61 +201,49 @@ segment code
     mov     al, [p2_color_idx]
     cmp     al, [p1_color_idx]
     je      .p2_next_color              ; Pula a cor já escolhida pelo P1
-    mov     byte [select_key_lock], 1
-    mov     byte [select_needs_redraw], 1
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .confirm_p2_and_start:
-    mov     byte [select_key_lock], 1
-    ; Limpa a caixa de seleção redesenhando a tela e inicia a partida
-    call    video_init
-    call    ui_draw_arena
     call    start_game
-    jmp     .render_frame
+    jmp     .prepare_frame
 
     ; --- VEZ DO JOGADOR 1 (W/S e Enter) ---
 .p1_select_turn:
     mov     al, SCANCODE_W
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .p1_prev_color
 
     mov     al, SCANCODE_S
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .p1_next_color
 
     mov     al, SCANCODE_ENTER
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     je      .confirm_p1_choice
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .p1_prev_color:
     dec     byte [p1_color_idx]
     and     byte [p1_color_idx], 03h    ; Wrap-around entre 0 e 3
-    mov     byte [select_key_lock], 1
-    mov     byte [select_needs_redraw], 1
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .p1_next_color:
     inc     byte [p1_color_idx]
     and     byte [p1_color_idx], 03h    ; Wrap-around entre 0 e 3
-    mov     byte [select_key_lock], 1
-    mov     byte [select_needs_redraw], 1
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .confirm_p1_choice:
     mov     byte [select_step], 1       ; Passa a vez para o P2
-    mov     byte [select_key_lock], 1
-    mov     byte [select_needs_redraw], 1
     ; Se o cursor inicial do P2 coincidir com a cor que P1 escolheu, avança 1 posição
     mov     al, [p2_color_idx]
     cmp     al, [p1_color_idx]
-    jne     .render_frame
+    jne     .prepare_frame
     inc     byte [p2_color_idx]
     and     byte [p2_color_idx], 03h
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .state_playing_logic:
     ; Leitura de inputs de movimento dos lutadores
@@ -317,21 +255,12 @@ segment code
     ; Verifica se algum HP chegou a 0 (KO) ou se os 180s acabaram
     call    check_round_rules
 
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .state_paused_logic:
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 .state_gameover_logic:
-    ; Desenha a caixa de Game Over apenas uma vez ao entrar no estado
-    cmp     byte [gameover_drawn], 1
-    je      .check_gameover_keys
-
-    mov     al, [match_winner]
-    call    ui_draw_gameover
-    mov     byte [gameover_drawn], 1
-
-.check_gameover_keys:
     ; Tecla N: Encerra o jogo
     mov     al, SCANCODE_N
     call    is_key_pressed
@@ -342,52 +271,81 @@ segment code
     mov     al, SCANCODE_Y
     call    is_key_pressed
     cmp     al, 1
-    jne     .render_frame
+    jne     .prepare_frame
 
-    ; Reseta as flags de controle da seleção
-    mov     byte [gameover_drawn], 0
+    ; Reseta a flag de controle da seleção
     mov     byte [select_step], 0
-    mov     byte [select_needs_redraw], 1
     
     ; Reseta os rounds dos jogadores para uma nova partida limpa
     mov     byte [p1 + Player.rounds], 0
     mov     byte [p2 + Player.rounds], 0
 
-    ; Restaura o visual da arena e transita para o estado de seleção
-    call    video_init
-    call    ui_draw_arena
+    ; Restaura o estado de seleção
     mov     byte [game_state], STATE_SELECT
+
+; --- COMPOSIÇÃO DA CENA ---
+.prepare_frame:
+    call    ui_draw_arena               ; Arena sempre é desenhada
+    call    player_draw_all             ; Lutadores sempre são desenhados
+
+    mov     al, [game_state]            ; Verificamos o estado e carregamos seus componentes específicos no frame
+
+    cmp     al, STATE_SELECT
+    je      .draw_select_scene
+
+    cmp     al, STATE_PLAYING
+    je      .draw_playing_scene
+
+    cmp     al, STATE_PAUSED
+    je      .draw_paused_scene
+
+    cmp     al, STATE_CONFIRM_QUIT
+    je      .draw_confirm_quit_scene
+
+    cmp     al, STATE_GAMEOVER
+    je      .draw_gameover_scene
+
     jmp     .render_frame
 
-.render_frame:
-    ; VSYNC!!! Aguarda a placa de vídeo entrar em Retrace Vertical 
-    ; para desenhar/atualizar os elementos, evitando screen-tearing e reduzindo flickering
-    call video_wait_vsync
+.draw_select_scene:
+    mov     al, [p1_color_idx]
+    mov     ah, [p2_color_idx]
+    mov     bl, [select_step]
+    call    ui_draw_select
+    jmp     .render_frame
 
-    cmp     byte [game_state], STATE_PLAYING
-    je      .draw_fighters
-    cmp     byte [game_state], STATE_SELECT
-    je      .draw_fighters
-    jmp     .draw_hud_only
-
-    ; Desenha a barra de HP dos dois jogadores
-    mov    al, [p1 + Player.hp] 
-    mov    ah, [p2 + Player.hp] 
-    call   ui_draw_hud                     ; hud precisa ser atualizada constantemente
-
-    jmp     .game_loop
-
-; Limpa sprites do frame anterior e renderiza os novos
-.draw_fighters:
-    call    player_erase_all
-    call    player_draw_all
-
-.draw_hud_only:
+.draw_playing_scene:
     mov     al, [p1 + Player.hp]
     mov     ah, [p2 + Player.hp]
     call    ui_draw_hud
-    jmp     .game_loop
+    jmp     .render_frame
 
+.draw_paused_scene:
+    mov     al, [p1 + Player.hp]
+    mov     ah, [p2 + Player.hp]
+    call    ui_draw_hud
+    call    ui_draw_pause               ; Sobrepõe a caixa de pausa
+    jmp     .render_frame
+
+.draw_confirm_quit_scene:
+    mov     al, [p1 + Player.hp]
+    mov     ah, [p2 + Player.hp]
+    call    ui_draw_hud
+    call    player_draw_all
+    call    ui_draw_confirm_quit        ; Sobrepõe a caixa de confirmação
+    jmp     .render_frame
+
+.draw_gameover_scene:
+    mov     al, [p1 + Player.hp]
+    mov     ah, [p2 + Player.hp]
+    call    ui_draw_hud
+    call    player_draw_all
+    mov     al, [match_winner]
+    call    ui_draw_gameover
+
+.render_frame:
+    call    video_render
+    jmp     .game_loop
 
 .state_confirm_quit_logic:
     ; Tecla Y: Confirma a saída e encerra o jogo
@@ -400,28 +358,12 @@ segment code
     mov     al, SCANCODE_N
     call    is_key_pressed
     cmp     al, 1
-    jne     .render_frame
+    jne     .prepare_frame
 
     ; Restaura o estado salvo antes de apertar Q
     mov     al, [prev_game_state]
     mov     [game_state], al
-
-    cmp     al, STATE_PAUSED
-    je      .restore_paused_ui
-    cmp     al, STATE_GAMEOVER
-    je      .restore_gameover_ui
-
-    ; Se retornou para STATE_PLAYING, redesenha a arena (apaga a caixa central)
-    call    ui_draw_arena
-    jmp     .render_frame
-
-.restore_paused_ui:
-    call    ui_draw_pause
-    jmp     .render_frame
-
-.restore_gameover_ui:
-    mov     byte [gameover_drawn], 0
-    jmp     .render_frame
+    jmp     .prepare_frame
 
 ; Restauração do estado pré-execução e retorno ao DOS
 .exit_game:

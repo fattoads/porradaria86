@@ -4,11 +4,13 @@
 ; 
 ; ALTERAÇÕES: Enrico Polez, Felipe Bruno, Vitor Tomé
 ;   Adaptação para uso como módulo no projeto (removendo código de teste e suas variáveis, exportando funções)
+;	Diversas otimizações
 
 ; ver linec.inc para entender a necessidade dessa linha
 %define LINEC_ASM
 
 %include "linec.inc"
+%include "video.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS
@@ -23,67 +25,177 @@ global cor
 
 segment code
 
-;-----------------------------------------------------------------------------
-;função cursor
-; Parametros:
-; 	DH = linha (0-29) e  DL = coluna  (0-79)
+; ------------------------------------------------------------------------------
+; cursor: Define a posição (X, Y) em pixels onde o texto será desenhado.
+; Entrada (via pilha): [BP+6] = X, [BP+4] = Y
+; ------------------------------------------------------------------------------
 cursor:
-		PUSHf
-		PUSH 	AX
-		PUSH 	BX
-		MOV     AH,2
-		MOV     BH,0
-		INT     10h
-		POP		BX
-		POP		AX
-		POPf
-		RET
-;-----------------------------------------------------------------------------
-;função caracter escrito na posição do cursor
-; Parametros:
-; 	AL = caracter a ser escrito
-; 	cor definida na variavel cor
+    push    bp
+    mov     bp, sp
+    push    ax
+
+    mov     ax, [bp+6]
+    mov     [cursor_x], ax
+    mov     ax, [bp+4]
+    mov     [cursor_y], ax
+
+    pop     ax
+    pop     bp
+    ret     4
+
+; ------------------------------------------------------------------------------
+; caracter: Desenha os pixels de um caractere ASCII nos buffers de RAM via plot_xy
+; Entrada: AL = Código ASCII do caractere (ex: 'A')
+; Utiliza a cor definida na variável global [cor]
+; ------------------------------------------------------------------------------
 caracter:
-		PUSHf
-		PUSH 	AX
-		PUSH 	BX
-		PUSH	CX
-    	MOV     AH,9
-    	MOV     BH,0
-    	MOV     CX,1
-   		MOV     bl,[cor]
-    	INT     10h
-		POP		CX
-		POP		BX
-		POP		AX
-		POPf
-		RET
-;-----------------------------------------------------------------------------
-;função plot_xy
-; Parametros:
-;	PUSH x; PUSH y; CALL plot_xy;  (x<639, y<479)
-; 	cor definida na variavel cor
+    push    ax
+    push    bx
+    push    cx
+    push    dx
+    push    si
+    push    di
+    push    bp
+    push    es
+
+    push    ax                  ; Salva AL (caractere ASCII) na pilha
+
+    ; 1. Consulta o ponteiro da tabela de fonte 8x8 na ROM do BIOS
+    ; Retorna ES:BP apontando para o início da matriz de fontes 8x8
+    mov     ax, 1130h
+    mov     bh, 03h             ; BH = 3 (fonte 8x8)
+    int     10h
+
+    pop     ax                  ; Restaura AL = código ASCII
+    xor     ah, ah              ; AX = código ASCII (0..255)
+
+    ; 2. Calcula offset do caractere na ROM: BP = BP + (ASCII * 8)
+    shl     ax, 3               ; AX = ASCII * 8 (cada caractere tem 8 bytes)
+    add     bp, ax              ; ES:BP aponta para os 8 bytes do caractere
+
+    ; 3. Percorre as 8 linhas verticais da matriz de pixels
+    mov     si, 0               ; SI = linha vertical (0 a 7)
+
+.row_loop:
+    cmp     si, 8
+    jge     .done_char
+
+    mov     dl, [es:bp+si]      ; DL = byte com os 8 pixels da linha
+    mov     cx, 0               ; CX = coluna horizontal (0 a 7)
+
+.bit_loop:
+    cmp     cx, 8
+    jge     .next_row
+
+    ; Testa se o bit 7 está ativo (pixel aceso)
+    test    dl, 80h
+    jz      .skip_pixel
+
+    ; Pixel aceso: calcula posição e chama plot_xy(cursor_x + CX, cursor_y + SI)
+    mov     ax, [cursor_x]
+    add     ax, cx
+    push    ax                  ; Param X
+
+    mov     ax, [cursor_y]
+    add     ax, si
+    push    ax                  ; Param Y
+
+    call    plot_xy             ; Desenha no buffer off-screen em RAM!
+
+.skip_pixel:
+    shl     dl, 1               ; Desloca para o próximo bit (Bit 6 vira Bit 7)
+    inc     cx
+    jmp     .bit_loop
+
+.next_row:
+    inc     si
+    jmp     .row_loop
+
+.done_char:
+    ; 4. Avança a posição X do cursor em 8 pixels para o próximo caractere
+    add     word [cursor_x], 8
+
+    pop     es
+    pop     bp
+    pop     di
+    pop     si
+    pop     dx
+    pop     cx
+    pop     bx
+    pop     ax
+    ret
+	
+; ------------------------------------------------------------------------------
+; plot_xy: Altera a cor de um pixel (X, Y) nos buffers de RAM off-screen.
+; Entrada (via pilha): [BP+6] = X (0..639), [BP+4] = Y (0..479)
+; ------------------------------------------------------------------------------
 plot_xy:
-		PUSH	BP
-		MOV		BP,SP
-		PUSHf
-		PUSH 	AX
-		PUSH 	BX
-		PUSH	CX
-		PUSH	DX
-	    MOV     AH,0Ch
-	    MOV     AL,[cor]
-	    MOV     BH,0
-	    MOV		DX,[BP+4]	; Retirada a inversão do eixo Y
-	    MOV     CX,[BP+6]
-	    INT     10h
-		POP		DX
-		POP		CX
-		POP		BX
-		POP		AX
-		POPf
-		POP		BP
-		RET		4
+    push    bp
+    mov     bp, sp
+    push    ax
+    push    bx
+    push    cx
+    push    dx
+	push	es
+
+    ; Calcula offset nos buffers: BX = (Y * 80) + (X / 8)
+    mov     ax, [bp+4]          ; AX = Y
+    mov     bx, 80
+    mul     bx                  ; AX = Y * 80
+    mov     bx, [bp+6]          ; BX = X
+    shr     bx, 3               ; BX = X / 8
+    add     bx, ax              ; BX = Offset (0 a 38399)
+
+    ; Calcula a bitmask (AH) e sua inversa (AL)
+    mov     cx, [bp+6]
+    and     cl, 7               ; CL = X % 8
+    mov     ah, 80h				; Inicializamos com 1 na posição mais à esquerda e deslocamos CL unidades à direita
+    shr     ah, cl              ; AH = Bit desejado (ex: 10000000b)
+    mov     al, ah
+    not     al                  ; AL = Mascara limpa (ex: 01111111b)
+
+    mov     dl, [cor]           ; DL = Cor atual (0 a 15)
+
+    ; --- PLANO 0 (Bit 0 da cor) ---
+	mov		es, [plane0_seg]
+    and     byte [es:bx], al   ; Limpa o byte atual
+    test    dl, 01h                      ; Testa se o Bit 0 da cor é 1
+    jz      .check_p1
+    or      byte [es:bx], ah   ; Liga o bit alvo se for 1
+
+.check_p1:
+    ; --- PLANO 1 (Bit 1 da cor) ---
+	mov		es, [plane1_seg]
+    and     byte [es:bx], al
+    test    dl, 02h
+    jz      .check_p2
+    or      byte [es:bx], ah
+
+.check_p2:
+    ; --- PLANO 2 (Bit 2 da cor) ---
+	mov		es, [plane2_seg]
+    and     byte [es:bx], al
+    test    dl, 04h
+    jz      .check_p3
+    or      byte [es:bx], ah
+
+.check_p3:
+    ; --- PLANO 3 (Bit 3 da cor) ---
+	mov		es, [plane3_seg]
+    and     byte [es:bx], al
+    test    dl, 08h
+    jz      .done
+    or      byte [es:bx], ah
+
+.done:
+	pop		es
+    pop     dx
+    pop     cx
+    pop     bx
+    pop     ax
+    pop     bp
+    ret     4
+
 ;-----------------------------------------------------------------------------
 ;função circle
 ; Parametros:
@@ -513,6 +625,9 @@ fim_line:
 ;*******************************************************************
 segment data
 
+
+cursor_x		dw		0
+cursor_y		dw		0
 deltax			dw		0
 deltay			dw		0	
 cor		        db		branco_intenso

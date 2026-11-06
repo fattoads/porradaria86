@@ -11,7 +11,9 @@
 global kbd_init
 global kbd_restore
 global is_key_pressed
+global get_key_event
 global key_states
+global key_events
 
 ; ------------------------------------------------------------------------------
 ; DS
@@ -21,6 +23,10 @@ segment data
 ; Array com o estado de 128 teclas possíveis do teclado (0 = Solta, 1 = Pressionada)
 ; Indexado pelo código Make da tecla (0x00 - 0x7F)
 key_states: resb 128
+
+; Array semelhante a key_states, mas armazena se a tecla foi pressionada em ALGUM MOMENTO desde a última leitura.
+; Reseta o estado quando lido. Útil para debounce.
+key_events: resb 128
 
 ; Armazenamento do endereço original do vetor da INT 9h para restauração ao sair
 orig_int9_off dw 0 ; IP
@@ -138,6 +144,7 @@ kbd_isr:
     ; Setamos o estado dessa tecla
     and     bx, 007Fh           ; O scan code só é representado pelos primeiros 7 bits
     mov     byte [key_states + bx], 1
+    mov     byte [key_events + bx], 1
     jmp     .eoi
 
 .key_released:
@@ -166,5 +173,19 @@ is_key_pressed:
     mov     bl, al                  ; Armazenando scan code em BL para indexação
     and     bx, 007Fh               ; O scan code só é representado pelos primeiros 7 bits
     mov     al, [key_states + bx]   ; AL armazena o estado da tecla
+    pop     bx
+    ret
+
+; ------------------------------------------------------------------------------
+; get_key_event: Para MENUS e CLIQUES ÚNICOS (Seleção, Pausa, Golpes).
+; Entrada: AL = Scan Code da tecla
+; Retorna AL = 1 se a tecla foi pressionada e ZERA o estado imediatamente.
+; ------------------------------------------------------------------------------
+get_key_event:
+    push    bx
+    mov     bl, al
+    and     bx, 007Fh
+    mov     al, [key_events + bx]       ; Lê o estado atual
+    mov     byte [key_events + bx], 0   ; Zera após a leitura, consumindo o evento
     pop     bx
     ret

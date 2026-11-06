@@ -141,7 +141,7 @@ player_update_input:
 .p1_check_jump:
     ; Tecla W: Pulo
     mov     al, SCANCODE_W
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     jne     .p1_check_attack
     cmp     byte [p1 + Player.is_grounded], 1
@@ -153,7 +153,7 @@ player_update_input:
 .p1_check_attack:
     ; Tecla T: Soco
     mov     al, SCANCODE_T
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     jne     .p1_check_kick
     
@@ -170,7 +170,7 @@ player_update_input:
 .p1_check_kick:
     ; Tecla R: Chute P1
     mov     al, SCANCODE_R
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     jne     .update_p2_input
 
@@ -251,7 +251,7 @@ player_update_input:
 .p2_check_attack:
     ; Tecla M: Soco
     mov     al, SCANCODE_M
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     jne     .p2_check_kick
     
@@ -268,7 +268,7 @@ player_update_input:
 .p2_check_kick:
     ; Tecla N: Chute P1
     mov     al, SCANCODE_N
-    call    is_key_pressed
+    call    get_key_event
     cmp     al, 1
     jne     .done_input
 
@@ -391,34 +391,6 @@ draw_single_player:
     pop     dx
     pop     cx
     pop     bx
-    pop     ax
-    ret
-
-; ------------------------------------------------------------------------------
-; player_erase_all: Apaga as posições anteriores dos jogadores.
-; ------------------------------------------------------------------------------
-player_erase_all:
-    ; Salva estado
-    push    ax
-    push    cx
-    push    dx
-
-    ; Apagamos P1
-    mov     ax, [p1 + Player.old_x]
-    mov     dx, [p1 + Player.old_y]
-    mov     cl, [p1 + Player.old_state]
-    mov     byte [cor], preto
-    call    draw_single_player
-
-    ; Apagamos P2
-    mov     ax, [p2 + Player.old_x]
-    mov     dx, [p2 + Player.old_y]
-    mov     cl, [p2 + Player.old_state]
-    call    draw_single_player
-
-    ; Restaura estado
-    pop     dx
-    pop     cx
     pop     ax
     ret
 

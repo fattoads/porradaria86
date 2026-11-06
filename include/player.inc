@@ -50,7 +50,6 @@ ENDSTRUC
 
 %ifndef PLAYER_ASM
 extern player_init
-extern player_erase_all
 extern player_draw_all
 extern player_update_input
 extern p1
