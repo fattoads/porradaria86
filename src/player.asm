@@ -12,6 +12,7 @@
 %include "player.inc"
 %include "action.inc"
 %include "ui.inc"
+%include "sprite.inc"
 
 ; ------------------------------------------------------------------------------
 ; SÍMBOLOS EXPORTADOS
@@ -19,7 +20,6 @@
 global p1
 global p2
 global player_init
-global player_erase_all
 global player_draw_all
 global player_update_input
 
@@ -56,11 +56,11 @@ player_init:
     mov     byte [p1 + Player.hp], PLAYER_MAX_HP
     mov     byte [p1 + Player.state], STATE_IDLE
     mov     byte [p1 + Player.dir], DIR_RIGHT
-    ; mov     byte [p1 + Player.color], cyan_claro
-    ; mov     byte [p1 + Player.rounds], 0
     mov     byte [p1 + Player.is_grounded], 1
     mov     byte [p1 + Player.attack_active], 0
     mov     byte [p1 + Player.stun_timer], 0
+    mov     byte [p1 + Player.anim_frame], 0
+    mov     byte [p1 + Player.anim_timer], 0
 
     ; --- JOGADOR 2 ---
     mov     word [p2 + Player.x], P2_START_X
@@ -72,11 +72,11 @@ player_init:
     mov     byte [p2 + Player.hp], PLAYER_MAX_HP
     mov     byte [p2 + Player.state], STATE_IDLE
     mov     byte [p2 + Player.dir], DIR_LEFT
-    ; mov     byte [p2 + Player.color], rosa
-    ; mov     byte [p2 + Player.rounds], 0
     mov     byte [p2 + Player.is_grounded], 1
     mov     byte [p2 + Player.attack_active], 0
     mov     byte [p2 + Player.stun_timer], 0
+    mov     byte [p2 + Player.anim_frame], 0
+    mov     byte [p2 + Player.anim_timer], 0
 
     pop     ax
     ret
@@ -125,6 +125,8 @@ player_update_input:
     jne     .p1_check_right
     mov     word [p1 + Player.vx], -3
     mov     byte [p1 + Player.dir], DIR_LEFT
+    cmp     byte [p1 + Player.is_grounded], 1
+    jne     .p1_check_jump
     mov     byte [p1 + Player.state], STATE_WALK
     jmp     .p1_check_jump
 
@@ -133,10 +135,20 @@ player_update_input:
     mov     al, SCANCODE_D
     call    is_key_pressed
     cmp     al, 1
-    jne     .p1_check_jump
+    jne     .p1_no_walk
     mov     word [p1 + Player.vx], 3
     mov     byte [p1 + Player.dir], DIR_RIGHT
+    cmp     byte [p1 + Player.is_grounded], 1
+    jne     .p1_check_jump
     mov     byte [p1 + Player.state], STATE_WALK
+    jmp     .p1_check_jump
+
+.p1_no_walk:
+    cmp     byte [p1 + Player.is_grounded], 1
+    jne     .p1_check_jump
+    cmp     byte [p1 + Player.state], STATE_WALK
+    jne     .p1_check_jump
+    mov     byte [p1 + Player.state], STATE_IDLE
 
 .p1_check_jump:
     ; Tecla W: Pulo
@@ -166,6 +178,8 @@ player_update_input:
     mov     byte [p1 + Player.attack_timer], ATTACK_TOTAL_DURATION
     mov     byte [p1 + Player.attack_type], ATTACK_TYPE_PUNCH
     mov     byte [p1 + Player.state], STATE_ATTACK
+    mov     byte [p1 + Player.anim_frame], 0       ; Reinicia a animação no Frame 0
+    mov     byte [p1 + Player.anim_timer], 0
 
 .p1_check_kick:
     ; Tecla R: Chute P1
@@ -183,6 +197,8 @@ player_update_input:
     mov     byte [p1 + Player.attack_timer], ATTACK_TOTAL_DURATION
     mov     byte [p1 + Player.attack_type], ATTACK_TYPE_KICK
     mov     byte [p1 + Player.state], STATE_ATTACK
+    mov     byte [p1 + Player.anim_frame], 0       ; Reinicia a animação no Frame 0
+    mov     byte [p1 + Player.anim_timer], 0
 
 .update_p2_input:
     ; PLAYER 2
@@ -223,6 +239,8 @@ player_update_input:
     jne     .p2_check_right
     mov     word [p2 + Player.vx], -3
     mov     byte [p2 + Player.dir], DIR_LEFT
+    cmp     byte [p2 + Player.is_grounded], 1
+    jne     .p2_check_jump
     mov     byte [p2 + Player.state], STATE_WALK
     jmp     .p2_check_jump
 
@@ -231,10 +249,20 @@ player_update_input:
     mov     al, SCANCODE_RIGHT
     call    is_key_pressed
     cmp     al, 1
-    jne     .p2_check_jump
+    jne     .p2_no_walk
     mov     word [p2 + Player.vx], 3
     mov     byte [p2 + Player.dir], DIR_RIGHT
+    cmp     byte [p2 + Player.is_grounded], 1
+    jne     .p2_check_jump
     mov     byte [p2 + Player.state], STATE_WALK
+    jmp     .p2_check_jump
+
+.p2_no_walk:
+    cmp     byte [p2 + Player.is_grounded], 1
+    jne     .p2_check_jump
+    cmp     byte [p2 + Player.state], STATE_WALK
+    jne     .p2_check_jump
+    mov     byte [p2 + Player.state], STATE_IDLE
 
 .p2_check_jump:
     ; Seta Cima: Pulo
@@ -264,6 +292,8 @@ player_update_input:
     mov     byte [p2 + Player.attack_timer], ATTACK_TOTAL_DURATION
     mov     byte [p2 + Player.attack_type], ATTACK_TYPE_PUNCH
     mov     byte [p2 + Player.state], STATE_ATTACK
+    mov     byte [p2 + Player.anim_frame], 0       ; Reinicia a animação no Frame 0
+    mov     byte [p2 + Player.anim_timer], 0
 
 .p2_check_kick:
     ; Tecla N: Chute P1
@@ -281,21 +311,30 @@ player_update_input:
     mov     byte [p2 + Player.attack_timer], ATTACK_TOTAL_DURATION
     mov     byte [p2 + Player.attack_type], ATTACK_TYPE_KICK
     mov     byte [p2 + Player.state], STATE_ATTACK
+    mov     byte [p2 + Player.anim_frame], 0       ; Reinicia a animação no Frame 0
+    mov     byte [p2 + Player.anim_timer], 0
 
 .done_input:
     pop     ax
     ret
 
 ; ------------------------------------------------------------------------------
-; draw_single_player: Função auxiliar para desenhar/apagar a silhueta do lutador.
-; Entrada:
-;   AX = Pos X
-;   DX = Pos Y
-;   CL = State (para checar STATE_CROUCH)
-;   Cor obtida de [cor] (black para apagar, Player.color para desenhar)
+; draw_sprite_mask: Desenha uma matriz de 32x32 bits com escala 2x2 no buffer RAM.
+; Entrada (via Pilha):
+;   [BP+10] = X base (centro do jogador)
+;   [BP+8]  = Y base (pé do jogador no chão)
+;   [BP+6]  = Endereço da matriz do sprite (128 bytes)
+;   [BP+4]  = Direção (DIR_RIGHT = 0, DIR_LEFT = 1)
+; Utiliza a cor global [cor]
 ; ------------------------------------------------------------------------------
-draw_single_player:
-    ; Salva estado
+draw_sprite_mask:
+    push    bp
+    mov     bp, sp
+    sub     sp, 6               ; Aloca 6 bytes para variáveis locais:
+                                ; [bp-2] = mask_byte (salva DL)
+                                ; [bp-4] = X_screen
+                                ; [bp-6] = Y_screen
+
     push    ax
     push    bx
     push    cx
@@ -303,136 +342,280 @@ draw_single_player:
     push    si
     push    di
 
-    cmp     cl, STATE_CROUCH
-    je      .draw_crouched
+    mov     si, [bp+6]          ; SI = Endereço da matriz do sprite (128 bytes)
+    mov     di, 0               ; DI = Linha vertical (0 a 31)
 
-    ; --- SILHUETA EM PÉ ---
-    ; Cabeça: (X, Y - 60, R=8)
-    push    ax
-    mov     bx, dx
-    sub     bx, 60
-    push    bx
-    push    word 8
-    call    full_circle
+.row_loop:
+    cmp     di, 32
+    jge     .done_draw
 
-    ; Tronco: (X, Y - 50) até (X, Y - 20)
-    mov     bx, dx
-    sub     bx, 50
-    mov     di, dx
-    sub     di, 20
-    push    ax
-    push    bx
-    push    ax
-    push    di
-    call    line
+    mov     bx, 0               ; BX = Byte da linha (0 a 3)
 
-    ; Perna Esquerda: (X - 10, Y) até (X, Y - 20)
-    mov     si, ax
-    sub     si, 10
-    push    si
+.byte_loop:
+    cmp     bx, 4
+    jge     .next_row
+
+    mov     dl, [si]            ; DL = Byte da máscara (8 pixels)
+    inc     si
+    mov     cx, 0               ; CX = Bit dentro do byte (0 a 7)
+
+.bit_loop:
+    cmp     cx, 8
+    jge     .next_byte
+
+    test    dl, 80h             ; Pixel aceso (Bit 7 = 1)?
+    jz      .skip_pixel
+
+    ; Salvamos a máscara em uma "variável local" na pilha
+    mov     [bp-2], dl
+
+    ; Calcula coluna do sprite
+    mov     ax, bx
+    shl     ax, 3
+    add     ax, cx              ; AX = (BX * 8) + CX
+
+    ; Espelha na direção esquerda
+    cmp     word [bp+4], DIR_LEFT
+    jne     .calc_coords
+    mov     dx, 31
+    sub     dx, ax
+    mov     ax, dx              ; AX = 31 - Coluna
+
+.calc_coords:
+    ; --- X_SCREEN = (X_base - 32) + (col * 2) ---
+    shl     ax, 1
+    add     ax, [bp+10]
+    sub     ax, 32
+    mov     [bp-4], ax          ; Salva X_screen em [bp-4]
+
+    ; --- Y_SCREEN = (Y_base - 64) + (row * 2) ---
+    mov     ax, di
+    shl     ax, 1
+    add     ax, [bp+8]
+    sub     ax, 64
+    mov     [bp-6], ax          ; Salva Y_screen em [bp-6]
+
+    ; --- DESENHA O PIXEL COM UPSCALING ---
+    ; Pixel 1: (X, Y)
+    push    word [bp-4]
+    push    word [bp-6]
+    call    plot_xy
+
+    ; Pixel 2: (X+1, Y)
+    mov     ax, [bp-4]
+    inc     ax
+    push    ax
+    push    word [bp-6]
+    call    plot_xy
+
+    ; Pixel 3: (X, Y+1)
+    mov     ax, [bp-6]
+    inc     ax
+    push    word [bp-4]
+    push    ax
+    call    plot_xy
+
+    ; Pixel 4: (X+1, Y+1)
+    mov     ax, [bp-4]
+    inc     ax
+    mov     dx, [bp-6]
+    inc     dx
+    push    ax
     push    dx
-    push    ax
-    push    di
-    call    line
+    call    plot_xy
 
-    ; Perna Direita: (X + 10, Y) até (X, Y - 20)
-    mov     si, ax
-    add     si, 10
-    push    si
-    push    dx
-    push    ax
-    push    di
-    call    line
-    jmp     .done
+    ; --- 7. RESTAURA A MÁSCARA DE BITS ---
+    mov     dl, [bp-2]
 
-.draw_crouched:
-    ; --- SILHUETA AGACHADA ---
-    ; Cabeça: (X, Y - 30, R=8)
-    push    ax
-    mov     bx, dx
-    sub     bx, 30
-    push    bx
-    push    word 8
-    call    full_circle
+.skip_pixel:
+    shl     dl, 1               ; Próximo bit (Bit 6 passa para Bit 7)
+    inc     cx
+    jmp     .bit_loop
 
-    ; Tronco: (X, Y - 25) até (X, Y - 10)
-    mov     bx, dx
-    sub     bx, 25
-    mov     di, dx
-    sub     di, 10
-    push    ax
-    push    bx
-    push    ax
-    push    di
-    call    line
+.next_byte:
+    inc     bx
+    jmp     .byte_loop
 
-    ; Perna Esquerda: (X - 12, Y) até (X, Y - 10)
-    mov     si, ax
-    sub     si, 12
-    push    si
-    push    dx
-    push    ax
-    push    di
-    call    line
+.next_row:
+    inc     di
+    jmp     .row_loop
 
-    ; Perna Direita: (X + 12, Y) até (X, Y - 10)
-    mov     si, ax
-    add     si, 12
-    push    si
-    push    dx
-    push    ax
-    push    di
-    call    line
-
-.done:
-    ; Restaura estado
+.done_draw:
     pop     di
     pop     si
     pop     dx
     pop     cx
     pop     bx
     pop     ax
+
+    mov     sp, bp              ; Libera as variáveis locais da pilha
+    pop     bp
+    ret     8                   ; Desempilha os 4 parâmetros da chamada
+
+; ------------------------------------------------------------------------------
+; player_draw_all: Desenha ambos os jogadores e atualiza seus antigos estados
+;                   e posições.
+; ------------------------------------------------------------------------------
+player_draw_all:
+    push    ax
+    push    bx
+    push    si
+
+    ; --- DESENHA JOGADOR 1 ---
+    mov     al, [p1 + Player.color]
+    mov     byte [cor], al
+
+    mov     si, p1
+    call    get_player_sprite_ptr       ; AX = ponteiro para o sprite de P1
+
+    push    word [p1 + Player.x]        ; Param 1: X
+    push    word [p1 + Player.y]        ; Param 2: Y
+    push    ax                          ; Param 3: Matriz
+    xor     bx, bx
+    mov     bl, [p1 + Player.dir]
+    push    bx                          ; Param 4: Direção (DIR_RIGHT/DIR_LEFT)
+    call    draw_sprite_mask
+
+    ; Salva histórico P1
+    mov     ax, [p1 + Player.x]
+    mov     [p1 + Player.old_x], ax
+    mov     ax, [p1 + Player.y]
+    mov     [p1 + Player.old_y], ax
+    mov     al, [p1 + Player.state]
+    mov     [p1 + Player.old_state], al
+
+    ; --- DESENHA JOGADOR 2 ---
+    mov     al, [p2 + Player.color]
+    mov     byte [cor], al
+
+    mov     si, p2
+    call    get_player_sprite_ptr       ; AX = ponteiro para o sprite de P2
+
+    push    word [p2 + Player.x]        ; Param 1: X
+    push    word [p2 + Player.y]        ; Param 2: Y
+    push    ax                          ; Param 3: Matriz
+    xor     bx, bx
+    mov     bl, [p2 + Player.dir]
+    push    bx                          ; Param 4: Direção
+    call    draw_sprite_mask
+
+    ; Salva histórico P2
+    mov     ax, [p2 + Player.x]
+    mov     [p2 + Player.old_x], ax
+    mov     ax, [p2 + Player.y]
+    mov     [p2 + Player.old_y], ax
+    mov     al, [p2 + Player.state]
+    mov     [p2 + Player.old_state], al
+
+    pop     si
+    pop     bx
+    pop     ax
     ret
 
 ; ------------------------------------------------------------------------------
-; player_draw_all: Desenha p1 e p2 nas coordenadas atuais e atualiza old_x/old_y/old_state.
+; get_player_sprite_ptr: Retorna em AX o ponteiro da matriz do sprite ativo.
+; Entrada: SI = Ponteiro para a struct Player (p1 ou p2)
+; Saída: AX = Endereço da matriz de 128 bytes
 ; ------------------------------------------------------------------------------
-player_draw_all:
-    ; Salva estado
-    push    ax
+get_player_sprite_ptr:
     push    bx
-    push    cx
-    push    dx
 
-    ; Desenhamos P1
-    mov     ax, [p1 + Player.x]
-    mov     dx, [p1 + Player.y]
-    mov     cl, [p1 + Player.state]
-    mov     bl, [p1 + Player.color]
-    mov     [cor], bl
-    call    draw_single_player
+    mov     al, [si + Player.state]
+    mov     bl, [si + Player.anim_frame]    ; BL = 0 ou 1 (para idle, walk, etc.)
 
-    ; Salvamos o histórico de P1
-    mov     [p1 + Player.old_x], ax
-    mov     [p1 + Player.old_y], dx
-    mov     [p1 + Player.old_state], cl
+    cmp     al, STATE_IDLE
+    je      .idle
+    cmp     al, STATE_WALK
+    je      .walk
+    cmp     al, STATE_JUMP
+    je      .jump
+    cmp     al, STATE_ATTACK
+    je      .attack
+    cmp     al, STATE_HIT
+    je      .hit
+    cmp     al, STATE_CROUCH
+    je      .crouch
+    jmp     .idle
 
-    ; Desenhamos P2
-    mov     ax, [p2 + Player.x]
-    mov     dx, [p2 + Player.y]
-    mov     cl, [p2 + Player.state]
-    mov     bl, [p2 + Player.color]
-    mov     [cor], bl
-    call    draw_single_player
+; --- ESTADOS PASSIVOS ---
+.idle:
+    cmp     bl, 0
+    jne     .idle_f1
+    mov     ax, sprite_SEMB_IDLE_FRAME0
+    jmp     .done
+.idle_f1:
+    mov     ax, sprite_SEMB_IDLE_FRAME1
+    jmp     .done
 
-    ; Salvamos o histórico de P2
-    mov     [p2 + Player.old_x], ax
-    mov     [p2 + Player.old_y], dx
-    mov     [p2 + Player.old_state], cl
+.walk:
+    cmp     bl, 0
+    jne     .walk_f1
+    mov     ax, sprite_SEMB_WALK_FRAME0
+    jmp     .done
+.walk_f1:
+    mov     ax, sprite_SEMB_WALK_FRAME1
+    jmp     .done
 
-    ; Restaura estado
-    pop     dx
-    pop     cx
+.jump:
+    mov     ax, sprite_SEMB_JUMP_FRAME0
+    jmp     .done
+
+.hit:
+    mov     ax, sprite_SEMB_HIT_FRAME0
+    jmp     .done
+
+.crouch:
+    cmp     bl, 0
+    jne     .crouch_f1
+    mov     ax, sprite_SEMB_CROUCH_FRAME0
+    jmp     .done
+.crouch_f1:
+    mov     ax, sprite_SEMB_CROUCH_FRAME1
+    jmp     .done
+
+; --- ESTADO DE ATAQUE ---
+.attack:
+    cmp     byte [si + Player.attack_type], ATTACK_TYPE_KICK
+    je      .kick
+
+    ; --- SOCO ---
+    mov     al, [si + Player.attack_timer]
+    cmp     al, 9
+    jg      .punch_startup          ; Timer 12..10: Startup (f0)
+    cmp     al, 4
+    jg      .punch_active           ; Timer 9..5: Active (f1)
+
+.punch_recovery:
+    mov     ax, sprite_SEMB_PUNCH_FRAME2     ; Timer 4..1: Recovery (f2)
+    jmp     .done
+
+.punch_active:
+    mov     ax, sprite_SEMB_PUNCH_FRAME1
+    jmp     .done
+
+.punch_startup:
+    mov     ax, sprite_SEMB_PUNCH_FRAME0
+    jmp     .done
+
+.kick:
+    ; --- CHUTE ---
+    mov     al, [si + Player.attack_timer]
+    cmp     al, 9
+    jg      .kick_startup           ; Timer 12..10: Startup (f0)
+    cmp     al, 4
+    jg      .kick_active            ; Timer 9..5: Active (f1)
+
+.kick_recovery:
+    mov     ax, sprite_SEMB_KICK_FRAME2      ; Timer 4..1: Recovery (f2)
+    jmp     .done
+
+.kick_active:
+    mov     ax, sprite_SEMB_KICK_FRAME1
+    jmp     .done
+
+.kick_startup:
+    mov     ax, sprite_SEMB_KICK_FRAME0
+
+.done:
     pop     bx
-    pop     ax
     ret
