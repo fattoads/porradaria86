@@ -1,3 +1,4 @@
+; ==============================================================================
 ; HEADER: linec.inc
 ; DESCRIÇÃO: Declarações extern das funções e constantes de desenho fornecidas
 ; AUTORIA: Enrico Polez, Felipe Bruno, Vitor Tomé
@@ -15,8 +16,6 @@
 extern cursor     
 extern caracter   
 extern plot_xy    
-extern circle     
-extern full_circle
 extern line       
 
 ; Variáveis exportadas de linec.asm

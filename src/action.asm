@@ -151,12 +151,12 @@ get_player_hitbox:
     mov     ax, [si + Player.x]
     cmp     byte [si + Player.dir], DIR_RIGHT
     jne     .left_dir
-    add     ax, 15
+    add     ax, 8           ; Ataques à direita são deslocados levemente nessa direção
     jmp     .store_hitbox
 
 .left_dir:
-    sub     ax, 15
-    sub     ax, cx                      ; X = x - 15 - W
+    sub     ax, 8           ; Ataques à esquerda são deslocados em igual medida
+    sub     ax, cx
 
 .store_hitbox:
     mov     [di], ax                    ; X 
@@ -251,6 +251,7 @@ action_update:
     ; Startup: Timer de 12 a 10 - Ataque sujeito a clash
     ; Active: Timer de 9 a 5    - Ataque ativo, causará dano se interceptar
     ; Recovery: Timer de 4 a 1  - Ataque finalizado, intervalo breve antes de retornar controle ao jogador
+    ;   obs: existe input buffering, então um ataque feito durante outro será disparado instantaneamente assim que esse acabar
     ; Se o timer chega em 0, não estamos mais no estado de ataque
     cmp     byte [p1 + Player.attack_timer], 0
     je      .check_p1_stun                      ; Se não estamos atacando, verificamos o estado de stun

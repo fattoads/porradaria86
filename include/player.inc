@@ -30,13 +30,10 @@ ATTACK_RECOVERY_FRAMES  equ 4     ; Recolhimento
 STRUC Player
     .x              resw 1    ; Posição X atual na tela
     .y              resw 1    ; Posição Y atual na tela
-    .old_x          resw 1    ; Posição X no frame anterior
-    .old_y          resw 1    ; Posição Y no frame anterior
     .vx             resw 1    ; Velocidade horizontal
     .vy             resw 1    ; Velocidade vertical
     .hp             resb 1    ; Energia atual (10 a 0)
     .state          resb 1    ; Estado atual
-    .old_state      resb 1    ; Estado no frame anterior
     .dir            resb 1    ; Direção que está olhando
     .color          resb 1    ; Cor escolhida
     .rounds         resb 1    ; Rounds vencidos

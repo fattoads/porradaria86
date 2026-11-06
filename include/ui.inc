@@ -7,8 +7,10 @@
 %ifndef UI_INC
 %define UI_INC
 
-WALL_LEFT       equ     24
-WALL_RIGHT      equ     615
+; Definições de limites para serem usadas pelo módulo de colisões
+;   (podem não ser geometricamente correspondentes ao desenho, mas estão calibradas para as hitboxes)
+WALL_LEFT       equ     51
+WALL_RIGHT      equ     621
 FLOOR_Y         equ     456
 
 %ifndef UI_ASM

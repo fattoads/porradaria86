@@ -49,8 +49,6 @@ player_init:
     ; --- JOGADOR 1 ---
     mov     word [p1 + Player.x], P1_START_X
     mov     word [p1 + Player.y], FLOOR_Y - 1
-    mov     word [p1 + Player.old_x], P1_START_X
-    mov     word [p1 + Player.old_y], FLOOR_Y - 1
     mov     word [p1 + Player.vx], 0
     mov     word [p1 + Player.vy], 0
     mov     byte [p1 + Player.hp], PLAYER_MAX_HP
@@ -65,8 +63,6 @@ player_init:
     ; --- JOGADOR 2 ---
     mov     word [p2 + Player.x], P2_START_X
     mov     word [p2 + Player.y], FLOOR_Y - 1
-    mov     word [p2 + Player.old_x], P2_START_X
-    mov     word [p2 + Player.old_y], FLOOR_Y - 1
     mov     word [p2 + Player.vx], 0
     mov     word [p2 + Player.vy], 0
     mov     byte [p2 + Player.hp], PLAYER_MAX_HP
@@ -377,9 +373,13 @@ draw_sprite_mask:
     ; Espelha na direção esquerda
     cmp     word [bp+4], DIR_LEFT
     jne     .calc_coords
-    mov     dx, 31
+    ; Deslocamento do sprite para alinhar com a hitbox
+    ;   Isso foi feito de forma mais ou menos empírica. Os sprites foram desenhados com ~7px de distância da borda do quadro em média,
+    ;   mas eles são salvos colados em uma das paredes. Logo, restam ~14-15px vazios na frente do sprite e precisamos compensar esse espaço
+    ;   desenhando ele com um deslocamento. 
+    mov     dx, 15
     sub     dx, ax
-    mov     ax, dx              ; AX = 31 - Coluna
+    mov     ax, dx
 
 .calc_coords:
     ; --- X_SCREEN = (X_base - 32) + (col * 2) ---
@@ -424,7 +424,7 @@ draw_sprite_mask:
     push    dx
     call    plot_xy
 
-    ; --- 7. RESTAURA A MÁSCARA DE BITS ---
+    ; Restaura a máscara de bits
     mov     dl, [bp-2]
 
 .skip_pixel:
@@ -476,14 +476,6 @@ player_draw_all:
     push    bx                          ; Param 4: Direção (DIR_RIGHT/DIR_LEFT)
     call    draw_sprite_mask
 
-    ; Salva histórico P1
-    mov     ax, [p1 + Player.x]
-    mov     [p1 + Player.old_x], ax
-    mov     ax, [p1 + Player.y]
-    mov     [p1 + Player.old_y], ax
-    mov     al, [p1 + Player.state]
-    mov     [p1 + Player.old_state], al
-
     ; --- DESENHA JOGADOR 2 ---
     mov     al, [p2 + Player.color]
     mov     byte [cor], al
@@ -498,14 +490,6 @@ player_draw_all:
     mov     bl, [p2 + Player.dir]
     push    bx                          ; Param 4: Direção
     call    draw_sprite_mask
-
-    ; Salva histórico P2
-    mov     ax, [p2 + Player.x]
-    mov     [p2 + Player.old_x], ax
-    mov     ax, [p2 + Player.y]
-    mov     [p2 + Player.old_y], ax
-    mov     al, [p2 + Player.state]
-    mov     [p2 + Player.old_state], al
 
     pop     si
     pop     bx
